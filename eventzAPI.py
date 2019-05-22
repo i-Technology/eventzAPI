@@ -1530,7 +1530,7 @@ class DS_Utility(object):
         startRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
                        self.dsParam.applicationId, self.dsParam.applicationName, myTime, self.dsParam.subscriptions,
                        self.dsParam.publications)
-        aPublisher.publish(9000000.00, RecordAction.INSERT.value.value, startRecord, '00000000-0000-0000-0000-000000000000', self.userId,
+        aPublisher.publish(9000000.00, RecordAction.INSERT.value, startRecord, '00000000-0000-0000-0000-000000000000', self.userId,
                            '', '', '', '', '')
         # aPublisher.publish(9000000.00, 0, '00000000-0000-0000-0000-000000000000', self.userId,
         #                    '', '', '', '', '', startRecord)
@@ -1546,7 +1546,7 @@ class DS_Utility(object):
 
         stopRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
                        self.dsParam.applicationId, self.dsParam.applicationName, myTime)
-        aPublisher.publish(9000001.00, RecordAction.INSERT.value.value, stopRecord, '00000000-0000-0000-0000-000000000000',
+        aPublisher.publish(9000001.00, RecordAction.INSERT.value, stopRecord, '00000000-0000-0000-0000-000000000000',
                            self.userId, '', '', '', '', '')
         # aPublisher.publish(9000001.00, 0, '00000000-0000-0000-0000-000000000000', self.userId,
         #                    '', '', '', '', '', stopRecord)
