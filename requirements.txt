@@ -1,4 +1,4 @@
-pika==0.13.1
+pika==1.0.1
 PyQt5==5.12.1
 PyQt5-sip==4.19.15
 PyYAML==5.1

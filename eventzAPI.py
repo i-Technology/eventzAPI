@@ -18,12 +18,18 @@
 #  q = Queue(maxsize = 0)
 #
 # Publish and Subscribe parameters are to be passed in as parameters. These parameters can be set in a global file
-# "settings.ymal" which is imported into the main application
+# e.g. "settings.yaml". The path to the settings file is provided to the dsInit.getParams method during initialization.
+# The getParams method returns a DS_Parameters object that can be provided to many of the Eventz API methods.
 #
+# ***** DEPRECATED *******
 # Database identifier. This identifier is prepended to DS messages so that when a subscriber receives
 # the message it can determine if it is a message that was sent by an application that modifies the local
 # database (archive) that its application is using. If so the data will already be in the database and the Subscriber
 # does'nt need to put it in the database (archive).  myDBID = uuid.uuid4()
+# ************************
+# Shared local archives are not allowed. Each local archive will service only one microservice. If the microservice
+# subscribes to a record it publishes then the publication will be returned to it through the subscriber task and
+# the record will be added to the local archive at that time.
 #
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #
@@ -71,7 +77,16 @@
 #       Changed the publish parameters to optional for some parameters.
 #       Added RecordAction enum class
 #
-__version__ = '2.0.4'
+#
+# Version 2.0.5 Bob Jackson
+#       Modified parameter lists and parameters to accommodate pika changes in v1.0.0 and v1.0.1
+#       pika v 1.0.1 is now required
+#       myDBID has been deprecated and will bo longer be generated.
+#       Deprecated and added fields to metadata including sessionID to support dedicated messaging within pubsub
+#       Modified DS_Parameters and it's arguments - made firstData optional defaulting to 16
+#       Modified non-pythonic method names to snake case from camel case
+#
+__version__ = '2.0.5'
 
 import pika
 import uuid
@@ -108,18 +123,27 @@ class DS_Parameters(object):
     23 Parameters
     '''
 
-    def __init__(self, exchange, brokerUserName, brokerPassword, brokerIP, dbID, interTaskQueue, routingKeys,
+    def __init__(self, exchange, brokerUserName, brokerPassword, brokerIP, sessionID, interTaskQueue, routingKeys,
                  publications, deviceId, deviceName, location, applicationId, applicationName, tenant, archivePath,
-                 encrypt, firstData, pathToCertificate, pathToKey, pathToCaCert, qt, brokerVirtual, thePublisher):
-        self.exchange = exchange
+                 encrypt, pathToCertificate, pathToKey, pathToCaCert, qt, brokerVirtual, thePublisher, firstData = 16):
+
+        # RabbitMQ Parameters
         self.brokerUserName = brokerUserName
         self.brokerPassword = brokerPassword
         self.brokerIP = brokerIP
-        self.myDBID = dbID
+        self.virtualhost = brokerVirtual
+        self.exchange = exchange
+
+        # self.myDBID = dbID        # Deprecated,
+
+        # Encryption Parameters
         self.pathToCaCert = pathToCaCert
         self.pathToCertificate = pathToCertificate
         self.pathToKey = pathToKey
-        self.interTaskQueue = interTaskQueue
+        self.encrypt = encrypt
+
+        # Application parameters
+        self.sessionID = sessionID
         self.archivePath = archivePath
         self.deviceId = deviceId
         self.deviceName = deviceName
@@ -127,13 +151,12 @@ class DS_Parameters(object):
         self.applicationId = applicationId
         self.applicationName = applicationName
         self.tenant = tenant
-        self.routingKeys = self.subscriptions = routingKeys
-        self.publications = publications
-        self.encrypt = encrypt
-        self.firstData =firstData
-        self.qt = qt
-        self.virtualhost = brokerVirtual
-        self.thePublisher = thePublisher
+        self.routingKeys = self.subscriptions = routingKeys # List of Record Types the application subscribes to
+        self.publications = publications    # List of record type the application publishes
+        self.firstData = firstData           # Offset to data past the metadata
+        self.qt = qt                            # True if Qt is the GUI
+        self.interTaskQueue = interTaskQueue    # For subscriber messages (non Qt GUIs)
+        self.thePublisher = thePublisher        # The one and only publisher object for the application
 
 #
 # The DS_Metadata Enum provides an index into the fields of metadata that pre-pend a DS record
@@ -153,9 +176,12 @@ class DS_MetaData(Enum):
     applicationId = 7
     versionLink= 8
     versioned = 9
-    userMetadata1 = 10
-    userMetadata2 = 11
-    userMetadata3 = 12
+    sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
+    userMetadata1 = 11      # User defined fields for query filtering
+    userMetadata2 = 12
+    userMetadata3 = 13
+    userMetadata4 = 14
+    userMetadata5 = 15
 
 #
 # The published record's second field if an action defining the action performed on the record.
@@ -177,20 +203,19 @@ class Publisher(object):
     DS_Init will create one and put it in the DS_Parameters object.
     '''
 
-    def __init__(self, dsParam):
+    def __init__(self,dsParam):
         self.dsParam = dsParam
         self.exchange = dsParam.exchange
         self.brokerUserName = dsParam.brokerUserName
         self.brokerPassword = dsParam.brokerPassword
         self.brokerIP = dsParam.brokerIP
-        self.myDBID = dsParam.myDBID
         self.encrypt = dsParam.encrypt
         self.applicationId = dsParam.applicationId
         self.tenant = dsParam.tenant
         self.cert = dsParam.pathToCertificate
         self.key = dsParam.pathToKey
         self.CaCert = dsParam.pathToCaCert
-        self.vitualhost = dsParam.virtualhost
+        self.virtualhost = dsParam.virtualhost
         self.channel = None
         self.connection = False
         self.publish_OK = False
@@ -199,13 +224,32 @@ class Publisher(object):
 
     # The publish method formats a message, adding metadata, and sends it to the AMQP broker
     #
-    def publish(self, recordType, action, dataTuple, link = 0, userId = '', umd1 = '', umd2 = '',
-                umd3 = '', umd4 = '', umd5 = ''):
+    def publish(self, recordType, dataTuple, action = RecordAction.INSERT.value, link = '00000000-0000-0000-0000-000000000000',
+                userId = '', versionLink = '00000000-0000-0000-0000-000000000000', versioned = False,
+                sessionID = '00000000-0000-0000-0000-000000000000', umd1 = '', umd2 = '', umd3 = '', umd4 = '',
+                umd5 = ''):
 
         '''
         The publish method formats a message, adding metadata, and sends it to the AMQP broker
         There is to be one publisher keeping one channel open. It is passed through DS_Parameters
         to functions that need to publish
+
+    recordType = 0
+    action = 1
+    recordId = 2
+    link = 3
+    tenant = 4
+    userId = 5
+    publishDateTime = 6
+    applicationId = 7
+    versionLink= 8
+    versioned = 9
+    sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
+    userMetadata1 = 11      # User defined fields for query filtering
+    userMetadata2 = 12
+    userMetadata3 = 13
+    userMetadata3 = 14
+    userMetadata3 = 15
         '''
 
         if self.channel is None or not self.channel.is_open:
@@ -227,16 +271,17 @@ class Publisher(object):
         if self.applicationId == 0:
             self.applicationId = '00000000-0000-0000-0000-000000000000'
 
-        data = (str(self.myDBID), recordTypeSz, action, recordId, link, self.tenant, userId,
-                datetime.datetime.utcnow().isoformat(sep='T'), self.applicationId, umd1, umd2, umd3, umd4, umd5) + dataTuple
+        data = (recordTypeSz, action, recordId, link, self.tenant, userId,
+                datetime.datetime.utcnow().isoformat(sep='T'), self.applicationId, versionLink, versioned, sessionID,
+                umd1, umd2, umd3, umd4, umd5) + dataTuple
 
         # Publish it
 
         rk = "{0:12.2f}".format(float(recordType)).strip()
         self.publish_OK = self.dsParam.thePublisher.channel.basic_publish(exchange=self.exchange, routing_key=rk,
-                              properties=pika.BasicProperties(content_type="text/plain", delivery_mode=2, ),
-                              body=str(data))
-        if self.publish_OK:
+                              body=str(data), properties=pika.BasicProperties(content_type="text/plain", delivery_mode=2, ),
+                              )
+        if self.publish_OK == None:
             return str(data)
         else:
             return None
@@ -245,7 +290,7 @@ class Publisher(object):
     # Publish a tuple that already has the metadata
     #
 
-    def rawPublish(self, recordType, dataTuple):
+    def raw_publish(self, recordType, dataTuple):
 
         '''
         Publish a tuple that already has the metadata (i,e, Metadata doesn't need to be added)
@@ -267,22 +312,23 @@ class Publisher(object):
 
         if not self.encrypt:
             parameters = pika.ConnectionParameters(host = self.brokerIP,
-                                                   port = 5672,
-                                                   virtual_host = self.vitualhost,
-                                                   credentials = (pika.PlainCredentials(self.brokerUserName ,self.brokerPassword)),
-                                                   heartbeat_interval=600,
-                                                   ssl=False,
+                                                   port=5672,
+                                                   virtual_host=self.virtualhost,
+                                                   credentials=(
+                                                       pika.PlainCredentials(self.brokerUserName, self.brokerPassword)),
+                                                   heartbeat=600,
+                                                   ssl_options=None,
                                                    socket_timeout=10,
                                                    blocked_connection_timeout=10,
-                                                   retry_delay=3,
+                                                   retry_delay=3.0,
                                                    connection_attempts=5)
         else:
             parameters = pika.ConnectionParameters(host = self.brokerIP,
                                                    port = 5671,
                                                    virtual_host = self.vitualhost,
                                                    credentials = (pika.PlainCredentials(self.brokerUserName ,self.brokerPassword)),
-                                                   heartbeat_interval=600,
-                                                   ssl=True,
+                                                   heartbeat=600,
+                                                   # ssl=True,
                                                    ssl_options = ({
                                                        "ca_certs": self.CaCert,
                                                        "certfile": self.cert,
@@ -293,15 +339,15 @@ class Publisher(object):
                                                    }),
                                                    socket_timeout=10,
                                                    blocked_connection_timeout=10,
-                                                   retry_delay=3,
+                                                   retry_delay=3.0,
                                                    connection_attempts=5)
 
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
-        result = self.channel.queue_declare(exclusive=True)
-        queue_name = result.method.queue
-        print ("Publishing Message on Queue: " + queue_name)
+        # result = self.channel.queue_declare(queue=str(self.myQueueName), exclusive=True)
+        # queue_name = result.method.queue
+        # print ("Publishing Message on Queue: " + queue_name)
 
 
     def stop(self):
@@ -326,7 +372,6 @@ class AssuredPublisher(object):
         self.brokerUserName = dsParam.brokerUserName
         self.brokerPassword = dsParam.brokerPassword
         self.brokerIP = dsParam.brokerIP
-        self.myDBID = dsParam.myDBID
         self.encrypt = dsParam.encrypt
         self.applicationId = dsParam.applicationId
         self.tenant = dsParam.tenant
@@ -403,7 +448,7 @@ class AssuredPublisher(object):
         if applicationId == 0:
             applicationId = '00000000-0000-0000-0000-000000000000'
 
-        data = (str(self.myDBID), recordType, action, recordId, link, self.tenant, userId,
+        data = (recordType, action, recordId, link, self.tenant, userId,
                 datetime.datetime.utcnow().isoformat(sep='T'), applicationId, umd1, umd2, umd3, umd4,
                 umd5) + dataTuple
 
@@ -454,7 +499,7 @@ class SubscriberFactory(object):
         self.subscriberThread.stop()  # Stop thread when application closes
     '''
 
-    def makeSubscriber(self, dsParam, applicationUser, archiver, utilities ):
+    def make_subscriber(self, dsParam, applicationUser, archiver, utilities):
 
         if dsParam.qt:
             subscriber = QtSubscriber().SubscriberThread(dsParam, applicationUser, archiver, utilities)
@@ -494,7 +539,6 @@ class QtSubscriber():
             self.brokerUserName = dsParam.brokerUserName
             self.brokerPassword = dsParam.brokerPassword
             self.brokerIP = dsParam.brokerIP
-            self.myDBID = dsParam.myDBID
             self.encrypt = dsParam.encrypt
             self.applicationId = dsParam.applicationId
             self.applicationName = dsParam.applicationName
@@ -515,6 +559,8 @@ class QtSubscriber():
             self.virtualhost = dsParam.virtualhost
             self.channel = None
             self.queue_name = None
+
+            self.myQueueName = (self.applicationName +  str(uuid.uuid4())).replace(" ", "")
 
             # Get the Publisher
             self.aPublisher = dsParam.thePublisher
@@ -566,7 +612,7 @@ class QtSubscriber():
             self.connection = pika.BlockingConnection(parameters)
             self.channel = self.connection.channel()
             self.channel.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
-            result = self.channel.queue_declare(exclusive=False, queue=str(self.myDBID))
+            result = self.channel.queue_declare(queue=str(self.myQueueName), exclusive=False )
             self.queue_name = result.method.queue
 
             workingRoutingKeys = self.routingKeys + self.systemRoutingKeys
@@ -599,7 +645,7 @@ class QtSubscriber():
             LOGGER.info("Waiting for RabbitMQ DS messages from queue %s", self.queue_name)
 
             # Get next request
-            self.channel.basic_consume(self.callback, queue=self.queue_name, no_ack=True)
+            self.channel.basic_consume(self.queue_name, on_message_callback=self.callback, auto_ack=True)
             self.channel.start_consuming()
             LOGGER.error("Should never get here !!!")
         #
@@ -632,7 +678,7 @@ class QtSubscriber():
         # Pass the message on to the main application
         #
 
-        def alertMainApp(self, bodyTuple):
+        def alert_main_app(self, bodyTuple):
 
             # Write the Local Archive if we are subscribing to this record type
 
@@ -675,9 +721,9 @@ class QtSubscriber():
             # aVersion = int(versionSz)
 
             LOGGER.info("External DS message received: %s", bodyStr)
-            bodyStr = bodyStr[i + 1:]  # Make this a tuple without dbid
+            # bodyStr = bodyStr[i + 1:]  # Make this a tuple without dbid
             # bodyStr = bodyStr[j + 1:]  # Make this a tuple
-            bodyStr = '(' + bodyStr
+            # bodyStr = '(' + bodyStr
             bodyTuple = eval(bodyStr)
             recordType = bodyTuple[0]
             tenantNo = bodyTuple[4]
@@ -691,64 +737,58 @@ class QtSubscriber():
             #if tenant is not the same then ignore message
             if self.tenant == tenantNo:
 
-                if sender != str(self.myDBID):  # Ignore if it was sent by me
+                # Handle System Messages
 
-                    print("Handling the messsage")
-                    # Handle System Messages
-
-                    if int(rt) in range(900000000, 910000099):
-                        LOGGER.info("IN RANGE")
-                        if float(recordType) == 9000010.00:  # Ping Request
-                            LOGGER.info("Got Ping Request")
-                            if bodyTuple[self.firstData] == '0':  # All ?
-                                LOGGER.info("Ping All Received.")
+                if int(rt) in range(900000000, 910000099):
+                    LOGGER.info("IN RANGE")
+                    if float(recordType) == 9000010.00:  # Ping Request
+                        LOGGER.info("Got Ping Request")
+                        if bodyTuple[self.firstData] == '0':  # All ?
+                            LOGGER.info("Ping All Received.")
+                            pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
+                                          self.applicationName, myTime)
+                            self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
+                                                    '00000000-0000-0000-0000-000000000000',
+                                                    self.applicationUser, '00000000-0000-0000-0000-000000000000',
+                                                    False,  '00000000-0000-0000-0000-000000000000',
+                                                    '', '', '', '', '')
+                        elif bodyTuple[self.firstData] == '1':  # Device Ping ?
+                            deviceWanted = bodyTuple[self.firstData+1].replace('\'', '').strip()
+                            LOGGER.info("Device Ping Received:[%s] Me:[%s]", deviceWanted, self.deviceId )
+                            if deviceWanted == self.deviceId:
+                                LOGGER.info("It's for Me!!")
                                 pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
                                               self.applicationName, myTime)
-                                self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
+                                self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
                                                         '00000000-0000-0000-0000-000000000000',
-                                                        self.applicationUser, '', '', '', '', '')
-                                # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                                #                         self.applicationUser, '', '', '', '', '', pingRecord)
-                            elif bodyTuple[self.firstData] == '1':  # Device Ping ?
-                                deviceWanted = bodyTuple[self.firstData+1].replace('\'', '').strip()
-                                LOGGER.info("Device Ping Received:[%s] Me:[%s]", deviceWanted, self.deviceId )
-                                if deviceWanted == self.deviceId:
-                                    LOGGER.info("It's for Me!!")
-                                    pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
-                                                  self.applicationName, myTime)
-                                    self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
-                                                            '00000000-0000-0000-0000-000000000000',
-                                                            self.applicationUser, '', '', '', '', '')
-                                    # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                                    #                         self.applicationUser, '', '', '', '', '', pingRecord)
+                                                        self.applicationUser,'00000000-0000-0000-0000-000000000000',
+                                                        False, '00000000-0000-0000-0000-000000000000',
+                                                        '', '', '', '', '')
 
-                            elif bodyTuple[self.firstData] == '2':  # Application Ping
-                                appWanted = bodyTuple[self.firstData+2].replace('\'', '').strip()
-                                LOGGER.info("Application Ping Received:[%s] Me:[%s]",appWanted,self.applicationId )
+                        elif bodyTuple[self.firstData] == '2':  # Application Ping
+                            appWanted = bodyTuple[self.firstData+2].replace('\'', '').strip()
+                            LOGGER.info("Application Ping Received:[%s] Me:[%s]",appWanted,self.applicationId )
 
-                                if appWanted == self.applicationId:
-                                    LOGGER.info("It's for Me!!")
-                                    pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
-                                                  self.applicationName, myTime)
-                                self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
-                                                        '00000000-0000-0000-0000-000000000000',
-                                                        self.applicationUser, '', '', '', '', '')
-                                # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                                #                         self.applicationUser, '', '', '', '', '', pingRecord)
-                            else:
-                                LOGGER.info('Invalid Ping Type:' + bodyTuple[self.firstData])
-
-                        # Pass unhandled messages to the main thread
-
+                            if appWanted == self.applicationId:
+                                LOGGER.info("It's for Me!!")
+                                pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
+                                              self.applicationName, myTime)
+                            self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
+                                                    '00000000-0000-0000-0000-000000000000',
+                                                    self.applicationUser, '00000000-0000-0000-0000-000000000000',
+                                                    False, '00000000-0000-0000-0000-000000000000',
+                                                    '', '', '', '', '')
                         else:
-                            self.alertMainApp(bodyTuple)
+                            LOGGER.info('Invalid Ping Type:' + bodyTuple[self.firstData])
+
+                    # Pass unhandled messages to the main thread
 
                     else:
-                        self.alertMainApp(bodyTuple)
+                        self.alert_main_app(bodyTuple)
 
                 else:
                     # Here I sent this message
-                    self.alertMainApp(bodyTuple)
+                    self.alert_main_app(bodyTuple)
 
             # def createSubscriberTask(self):
             #     return self.SubscriberThread(self)
@@ -779,7 +819,6 @@ class NonQtSubscriber():
             self.brokerUserName = dsParam.brokerUserName
             self.brokerPassword = dsParam.brokerPassword
             self.brokerIP = dsParam.brokerIP
-            self.myDBID = dsParam.myDBID
             self.encrypt = dsParam.encrypt
             self.applicationId = dsParam.applicationId
             self.applicationName = dsParam.applicationName
@@ -802,6 +841,8 @@ class NonQtSubscriber():
             self.channel = None
             self.queue_name = None
 
+            self.myQueueName = (self.applicationName +  str(uuid.uuid4())).replace(" ", "")
+
             atexit.register(self.stop)
 
         def reconnect(self):
@@ -812,19 +853,19 @@ class NonQtSubscriber():
                                                        port = 5672,
                                                        virtual_host = self.virtualhost,
                                                        credentials = (pika.PlainCredentials(self.brokerUserName ,self.brokerPassword)),
-                                                       heartbeat_interval=600,
-                                                       ssl=False,
+                                                       heartbeat=600,
+                                                       ssl_options=None,
                                                        socket_timeout=10,
                                                        blocked_connection_timeout=10,
-                                                       retry_delay=3,
+                                                       retry_delay=3.0,
                                                        connection_attempts=5)
             else:
                 parameters = pika.ConnectionParameters(host = self.brokerIP,
                                                        port = 5671,
                                                        virtual_host = self.virtualhost,
                                                        credentials = (pika.PlainCredentials(self.brokerUserName ,self.brokerPassword)),
-                                                       heartbeat_interval=600,
-                                                       ssl=True,
+                                                       heartbeat=600,
+                                                       # ssl=True,
                                                        ssl_options = ({
                                                            "ca_certs": self.CaCert,
                                                            "certfile": self.cert,
@@ -842,7 +883,7 @@ class NonQtSubscriber():
             self.connection = pika.BlockingConnection(parameters)
             self.channel = self.connection.channel()
             self.channel.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
-            result = self.channel.queue_declare(exclusive=True, queue=str(self.myDBID))
+            result = self.channel.queue_declare(str(self.myQueueName), exclusive=True )
             self.queue_name = result.method.queue
             workingRoutingKeys = self.routingKeys + self.systemRoutingKeys
 
@@ -874,7 +915,9 @@ class NonQtSubscriber():
             LOGGER.info("Waiting for RabbitMQ DS messages from queue %s", self.queue_name)
 
             # Get next request
-            self.channel.basic_consume(self.callback, queue=self.queue_name, no_ack=True)
+            LOGGER.info('queue:' + self.queue_name)
+            print('queue:' + self.queue_name)
+            self.channel.basic_consume(self.queue_name, on_message_callback=self.callback, auto_ack=True)
             self.channel.start_consuming()
             LOGGER.warning("Subscriber Thread is no longer consuming")
 
@@ -908,7 +951,7 @@ class NonQtSubscriber():
         # Pass the message on to the main application
         #
 
-        def alertMainApp(self, bodyTuple):
+        def alert_main_app(self, bodyTuple):
 
             # Write the Local Archive if we are subscribing to this record type and there is a local archive
 
@@ -938,17 +981,17 @@ class NonQtSubscriber():
             LOGGER.info("DS message is %s", body.decode('utf_8'))
 
             bodyStr = body.decode('utf_8')
-            i = bodyStr.find(',')  # see who sent this
-            sender = bodyStr[2:i - 1]
+            # i = bodyStr.find(',')  # see who sent this
+            # sender = bodyStr[2:i - 1]
 
             # j = bodyStr.find(',', i+1)  # see if this was generated by a Versioner (second field 0 = False, 1 = True)
             # versionSz = bodyStr[i+1:(j)]
             # aVersion = int(versionSz)
 
             LOGGER.info("External DS message received: %s", bodyStr)
-            bodyStr = bodyStr[i + 1:]  # Make this a tuple without dbid
+            # bodyStr = bodyStr[i + 1:]  # Make this a tuple without dbid
             # bodyStr = bodyStr[j + 1:]  # Make this a tuple
-            bodyStr = '(' + bodyStr
+            # bodyStr = '(' + bodyStr
             bodyTuple = eval(bodyStr)
             recordType = bodyTuple[0]
             tenantNo = bodyTuple[4]
@@ -973,11 +1016,11 @@ class NonQtSubscriber():
                             pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
                                           self.applicationName, myTime)
 
-                            self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
+                            self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
                                                     '00000000-0000-0000-0000-000000000000',
-                                                    self.applicationUser, '', '', '', '', '')
-                            # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                            #                         self.applicationUser, '', '', '', '', '', pingRecord)
+                                                    self.applicationUser, '00000000-0000-0000-0000-000000000000',
+                                                    False, '00000000-0000-0000-0000-000000000000',
+                                                    '', '', '', '', '')
                         elif bodyTuple[self.firstData] == '1':  # Device Ping ?
                             deviceWanted = bodyTuple[self.firstData + 1].replace('\'', '').strip()
                             LOGGER.info("Device Ping Received:[%s] Me:[%s]", deviceWanted, self.deviceId)
@@ -985,11 +1028,11 @@ class NonQtSubscriber():
                                 LOGGER.info("It's for Me!!")
                                 pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
                                               self.applicationName, myTime)
-                                self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
+                                self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
                                                         '00000000-0000-0000-0000-000000000000',
-                                                        self.applicationUser, '', '', '', '', '')
-                                # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                                #                         self.applicationUser, '', '', '', '', '', pingRecord)
+                                                        self.applicationUser, '00000000-0000-0000-0000-000000000000',
+                                                        False, '00000000-0000-0000-0000-000000000000',
+                                                        '', '', '', '', '')
 
                         elif bodyTuple[self.firstData] == '2':  # Application Ping
                             appWanted = bodyTuple[self.firstData + 2].replace('\'', '').strip()
@@ -999,24 +1042,24 @@ class NonQtSubscriber():
                                 LOGGER.info("It's for Me!!")
                                 pingRecord = (self.deviceId, self.deviceName, self.location, self.applicationId,
                                               self.applicationName, myTime)
-                                self.aPublisher.publish(9000011.00, RecordAction.INSERT.value, pingRecord,
+                                self.aPublisher.publish(9000011.00, pingRecord, RecordAction.INSERT.value,
                                                         '00000000-0000-0000-0000-000000000000',
-                                                    self.applicationUser, '', '', '', '', '')
-                                # self.aPublisher.publish(9000011.00, 0, '00000000-0000-0000-0000-000000000000',
-                                #                     self.applicationUser, '', '', '', '', '', pingRecord)
+                                                        self.applicationUser, '00000000-0000-0000-0000-000000000000',
+                                                        False, '00000000-0000-0000-0000-000000000000',
+                                                        '', '', '', '', '')
                         else:
                             LOGGER.info('Invalid Ping Type:' + bodyTuple[self.firstData])
 
                     # Pass unhandled messages to the main thread
 
                     else:
-                        self.alertMainApp(bodyTuple)
+                        self.alert_main_app(bodyTuple)
 
                 else:
-                    self.alertMainApp(bodyTuple)
+                    self.alert_main_app(bodyTuple)
             else:
                 # Here I sent this message
-                self.alertMainApp(bodyTuple)
+                self.alert_main_app(bodyTuple)
 
             def createSubscriberTask(self):
                 return self.SubscriberThread(self)
@@ -1027,26 +1070,42 @@ class NonQtSubscriber():
 # Classes for enabling queries of the Archive through the Librarian
 #
 
-class QueryTerm(dict):
-    '''
-    A term in a query consisting of a field name, an operator and the value for the search
-    '''
+# class QueryTerm(dict):
+#     '''
+#     A term in a query consisting of a field name, an operator and the value for the search
+#     '''
+#     def __init__(self, fieldName, operator, value):
+#         # self.fieldName = fieldName
+#         # self.operator = operator
+#         # self.value = value
+#         self = {"fieldName": fieldName,"operator": operator,"value": value}
+
+class  QueryTerm(dict):
     def __init__(self, fieldName, operator, value):
-        self.fieldName = fieldName
-        self.operator = operator
-        self.value = value
+        dict.__init__(self)
+        self.update({"fieldName": fieldName,"operator": operator,"value": value})
+
+
+    # class dsQuery(dict):
+#     '''
+#     A Query object that will contain one or more QueryTerm s in a list
+#     '''
+#     def __init__(self, limit, user, tenant, startDate, endDate, queryTerms):
+#         # self.limit = limit
+#         # self.user = user
+#         # self.tenant = str(tenant)
+#         # self.startDate = startDate
+#         # self.endDate = endDate
+#         # self.queryTerms = queryTerms        # A List of QueryTerm
+# 	    self = {'limit': limit, 'user': user, 'tenant': tenant, startDate: startDate, 'endDate': endDate, 'queryTerms': queryTerms}
 
 class dsQuery(dict):
-    '''
-    A Query object that will contain one or more QueryTerm s in a list
-    '''
-    def __init__(self, limit, user, tenant, startDate, endDate, queryTerms):
-        self.limit = limit
-        self.user = user
-        self.tenant = str(tenant)
-        self.startDate = startDate
-        self.endDate = endDate
-        self.queryTerms = queryTerms        # A List of QueryTerm
+	def __init__(self, limit, user, tenant, startDate, endDate, queryTerms):
+		dict.__init__(self)
+		self.update({'limit': limit, 'user': user, 'tenant': tenant, startDate: startDate, 'endDate': endDate,
+                     'queryTerms': queryTerms})
+
+
 
 #
 # The Librarian Client will send a query to the Librarian through the AMQP broker
@@ -1099,8 +1158,8 @@ class LibrarianClient(object):
                                                    virtual_host=self.vitualhost,
                                                    credentials=(
                                                        pika.PlainCredentials(self.brokerUserName, self.brokerPassword)),
-                                                   heartbeat_interval=600,
-                                                   ssl=False,
+                                                   heartbeat=600,
+                                                   # ssl=False,
                                                    socket_timeout=10,
                                                    blocked_connection_timeout=10,
                                                    retry_delay=3,
@@ -1111,7 +1170,7 @@ class LibrarianClient(object):
                                                    virtual_host=self.vitualhost,
                                                    credentials=(
                                                        pika.PlainCredentials(self.brokerUserName, self.brokerPassword)),
-                                                   heartbeat_interval=600,
+                                                   heartbeat=600,
                                                    ssl=True,
                                                    ssl_options=({
                                                        "ca_certs"   : self.CaCert,
@@ -1132,17 +1191,20 @@ class LibrarianClient(object):
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
 
-        result = self.channel.queue_declare(exclusive=True)
+        result = self.channel.queue_declare('', exclusive=True)
         self.callback_queue = result.method.queue
 
-        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
+        self.channel.basic_consume(self.callback_queue , on_message_callback=self.on_response, auto_ack=True)
 
         qdList = []
         t = threading.Timer(60, self.timerExpired) # Query timeout
         for q in queries:
-            qdList.append(q.__dict__)
-        query = dsQuery(limit, userName, tenant, startDate, endDate, qdList)
-        queryDict = query.__dict__
+            # qdList.append(q.__dict__)
+            qdList.append(q)
+        # query = dsQuery(limit, userName, tenant, startDate, endDate, qdList)
+        queryDict = {'limit': limit, 'user': userName, 'tenant': tenant, startDate: startDate, 'endDate': endDate,
+                'queryTerms': qdList}
+        # queryDict = query.__dict__
         querySz = json.dumps(queryDict, cls = to_json)
         self.response = None
         self.corr_id = str(uuid.uuid4())
@@ -1222,18 +1284,16 @@ class DS_Init(object):
         self.applicationName = applicationName
         self.interTaskQueue = None
 
-    def getParams(self, configurationfile, routingKeys, publications, publisher):
+    def get_params(self, configurationfile, routingKeys, publications, publisher):
         LOGGER.info('Reading configuration File')
         try:
             with open (configurationfile, 'r') as f:
-                condata = yaml.load(f)
+                condata = yaml.safe_load(f)
                 brokerExchange = condata['brokerExchange']
                 brokerPassword = condata['brokerPassword']
                 brokerUserName = condata['brokerUserName']
                 brokerIP = condata['brokerIP']
                 brokerVirtual = condata['brokerVirtual']
-                # myDBID = condata['myDBID']
-                myDBID = str(uuid.uuid4())
                 deviceId = condata['deviceId']
                 deviceName = condata['deviceName']
                 location = condata['location']
@@ -1244,6 +1304,7 @@ class DS_Init(object):
                 pathTocacert = condata['pathTocacert']
                 pathToCertificate = condata['pathToCertificate']
                 pathToKey = condata['pathToKey']
+                sessionId = uuid.uuid4()            # Set sessionId here so each instance will have it's own session
                 qt = condata['qt']
         except:
             LOGGER.error('Missing settings .yaml File')
@@ -1251,8 +1312,6 @@ class DS_Init(object):
 
         if deviceId == '':
             deviceId = ':'.join((itertools.starmap(operator.add, zip(*([iter("%012X" % get_mac())] * 2)))))
-        if myDBID == '':
-            myDBID = str(uuid.uuid4())
         if qt:
             self.interTaskQueue = None
         else:
@@ -1267,10 +1326,10 @@ class DS_Init(object):
         # with open(configurationfile, 'w') as yaml_file:
         #     yaml_file.write( yaml.dump(condata, default_flow_style=False))
 
-        dsParam = DS_Parameters( brokerExchange, brokerUserName, brokerPassword, brokerIP, myDBID, self.interTaskQueue,
+        dsParam = DS_Parameters( brokerExchange, brokerUserName, brokerPassword, brokerIP, sessionId, self.interTaskQueue,
                                  routingKeys, publications, deviceId, deviceName, location, self.applicationId,
-                                 self.applicationName, tenant, localArchivePath, encrypt, firstData, pathToCertificate,
-                                 pathToKey, pathTocacert, qt, brokerVirtual, publisher)
+                                 self.applicationName, tenant, localArchivePath, encrypt, pathToCertificate,
+                                 pathToKey, pathTocacert, qt, brokerVirtual, publisher, firstData)
 
         # Create the Publisher for the application
         aPublisher = Publisher(dsParam)
@@ -1312,7 +1371,7 @@ class DS_Utility(object):
     #   Used to initialize the local repository on startup or reset
     #
 
-    def refreshArchive(self, loggedInUser, localArchivePath, tenant, subscriptions=None):
+    def refresh_archive(self, loggedInUser, localArchivePath, tenant, subscriptions=None):
 
         LOGGER.info('Sending query and awaiting a response.')
         if (subscriptions != None and not('#' in subscriptions)):
@@ -1364,7 +1423,7 @@ class DS_Utility(object):
     # been updated or delected. will also remove and records that are not yours by comparing
     # the tenant records.
 
-    def updateArchive(self, loggedInUser, tenant, localList=None):
+    def update_archive(self, loggedInUser, tenant, localList=None):
 
         updateList =[]
         if (localList != None ):
@@ -1410,7 +1469,7 @@ class DS_Utility(object):
         return (updateList)
 
     #
-    # A function to append a new DS RECORD to the local Archive.
+    # A function to append a new Event RECORD to the local Archive.
     #
 
     def archive(self, record, pathToArchive):
@@ -1485,7 +1544,7 @@ class DS_Utility(object):
     # Returns the day of the year for a date
     #
 
-    def dayOfYear(self, aDate):
+    def day_of_year(self, aDate):
         fmt = '%Y-%m-%d'
         dt = datetime.datetime.strptime(aDate, fmt)
         tt = dt.timetuple()
@@ -1497,7 +1556,7 @@ class DS_Utility(object):
     #
 
 
-    def cleanDate(self, aDateString):
+    def clean_linux_date(self, aDateString):
         if len(aDateString) == 10:
             return aDateString
         else:
@@ -1517,61 +1576,46 @@ class DS_Utility(object):
     # Called when a application starts. Generates and publishes a system message.
     #
 
-    def startApplication(self, aPublisher, userId):
+    def start_application(self, aPublisher, userId):
 
         newUUID = uuid.uuid4()
         myTime = datetime.datetime.utcnow().isoformat(sep='T')
+        pid = os.getpid()
 
         # g.users.items())[g.currentUser]
 
         if self.dsParam.archivePath != "":
-            self.refreshArchive( userId, self.dsParam.archivePath, self.dsParam.tenant, self.dsParam.routingKeys)
+            self.refresh_archive(userId, self.dsParam.archivePath, self.dsParam.tenant, self.dsParam.routingKeys)
 
         startRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
                        self.dsParam.applicationId, self.dsParam.applicationName, myTime, self.dsParam.subscriptions,
-                       self.dsParam.publications)
-        aPublisher.publish(9000000.00, RecordAction.INSERT.value, startRecord, '00000000-0000-0000-0000-000000000000', self.userId,
+                       self.dsParam.publications, pid)
+
+        aPublisher.publish(9000000.00, startRecord, RecordAction.INSERT.value,
+                           '00000000-0000-0000-0000-000000000000',
+                           self.userId, '00000000-0000-0000-0000-000000000000',
+                           False, '00000000-0000-0000-0000-000000000000',
                            '', '', '', '', '')
-        # aPublisher.publish(9000000.00, 0, '00000000-0000-0000-0000-000000000000', self.userId,
-        #                    '', '', '', '', '', startRecord)
 
     #
     # Called when a application stops. Generates and publishes a system message.
     #
 
-    def stopApplication(self, aPublisher):
+    def stop_application(self, aPublisher):
 
         newUUID = uuid.uuid4()
         myTime = datetime.datetime.utcnow().isoformat(sep='T')
+        pid = os.getpid()
 
         stopRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
-                       self.dsParam.applicationId, self.dsParam.applicationName, myTime)
-        aPublisher.publish(9000001.00, RecordAction.INSERT.value, stopRecord, '00000000-0000-0000-0000-000000000000',
-                           self.userId, '', '', '', '', '')
-        # aPublisher.publish(9000001.00, 0, '00000000-0000-0000-0000-000000000000', self.userId,
-        #                    '', '', '', '', '', stopRecord)
+                       self.dsParam.applicationId, self.dsParam.applicationName, myTime, pid)
 
-#
-# If the OS (Linux) messes up the date format then fix it:
-# Want yyyy-mm-dd from d/m/yy strings
-#
+        aPublisher.publish(9000001.00, stopRecord, RecordAction.INSERT.value,
+                           '00000000-0000-0000-0000-000000000000',
+                           self.userId, '00000000-0000-0000-0000-000000000000',
+                           False, '00000000-0000-0000-0000-000000000000',
+                           '', '', '', '', '')
 
-
-    def cleanDate(self,aDateString):
-        if len(aDateString) == 10:
-            return aDateString
-        else:
-            slash1 = aDateString.find('/', 0)
-            slash2 = aDateString.find('/', slash1+1)
-            y = aDateString[slash2+1:]
-            d = aDateString[slash1+1:slash2]
-            if len(d) == 1:
-                d = '0' + d
-            m = aDateString[0:slash1]
-            if len(m) == 1:
-                m = '0' + m
-            newDateString = '20' + y + '-' + m + '-' + d
-            return newDateString
 
 #
 # A DS_Logger packages an error message in a system message and publishes it. Acts like a regular log message
@@ -1611,7 +1655,6 @@ class DS_Logger(object):
         self.brokerUserName = dsParam.brokerUserName
         self.brokerPassword = dsParam.brokerPassword
         self.brokerIP = dsParam.brokerIP
-        self.myDBID = dsParam.myDBID
         self.encrypt = dsParam.encrypt
         self.deviceId =  dsParam.deviceId
         self.deviceName =  dsParam.deviceName
@@ -1637,19 +1680,12 @@ class DS_Logger(object):
         logTuple = (self.deviceId, self.deviceName, self.location, self.applicationId, self.applicationName, errorType,
                     errorLevel, errorAction, errorText)
 
-        logPublisher.publish(9000020.00, RecordAction.INSERT.value, logTuple, '00000000-0000-0000-0000-000000000000', userID, '', '', '', '', '')
-        # logPublisher.publish(9000020.00, 0, '00000000-0000-0000-0000-000000000000', userID, '', '', '', '', '', logTuple)
+        logPublisher.publish(9000020.00, logTuple, RecordAction.INSERT.value,
+                             '00000000-0000-0000-0000-000000000000',
+                             userID, '00000000-0000-0000-0000-000000000000',
+                             False, '00000000-0000-0000-0000-000000000000',
+                             '', '', '', '', '')
 
-    #
-    # log method when we have a Publisher (DEPRECATED)
-    #
-
-    # def logP(self, logPublisher, userID, errorType, errorLevel, errorAction, errorText):
-    #
-    #     logTuple = (self.deviceID, self.deviceName, self.location, self.applicationID, self.applicationName, errorType, errorLevel, errorAction,
-    #                 errorText)
-    #
-    #     logPublisher.publish(9000020.00, 0, '00000000-0000-0000-0000-000000000000', userID, '', '', '', '', '', logTuple)
 
 #
 # A State Machine allows an application to recognize state
@@ -1689,7 +1725,7 @@ class StateMachine(object):
     # processEvent is called when an event occurs in the main loop or when one is generated by a method
     #
 
-    def processEvent(self, event):
+    def process_event(self, event):
 
         found = False
         for ev in self.stateTable:      # Find the event entry in the state table
@@ -1728,7 +1764,7 @@ class SMU(object):
     #
     # Translate Table From csv
     #
-    def translateTable(self, pathToTable):
+    def translate_table(self, pathToTable):
         rowNo = 0
         states = []
         stateTable = []

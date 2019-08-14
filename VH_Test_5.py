@@ -3,7 +3,7 @@ import pika
 import logging
 import yaml
 import atexit
-from dsapi import Publisher, SubscriberFactory, DS_Logger, DS_Utility, DS_Parameters, LibrarianClient, DS_Init, QueryTerm, dsQuery
+from eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, DS_Parameters, LibrarianClient, DS_Init, QueryTerm, dsQuery
 from flatArchiver import  Archiver
 import sys
 import atexit
@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
     dsInit = DS_Init(applicationId, applicationName)
 
-    dsParam = dsInit.getParams('settings.yaml', routingKeys, publications, None)
+    dsParam = dsInit.get_params('settings.yaml', routingKeys, publications, None)
 
     #aPublisher = Publisher(dsParam)
     aPublisher = dsParam.thePublisher
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         dsParam.brokerPassword = str('VH_' + str(x))
         # Create and start a subscriber thread
         aSubscriber = SubscriberFactory()
-        subscriber = aSubscriber.makeSubscriber(dsParam, userId, archiver, utilities)
+        subscriber = aSubscriber.make_subscriber(dsParam, userId, archiver, utilities)
         subscriber.setName("SubscriberThread")
         try:
             subscriber.start()

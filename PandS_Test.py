@@ -60,8 +60,14 @@ class testps (object):
                 x = x+1
 
             try:
-                self.publisher.publish(999000.00, 0, '00000000-0000-0000-0000-000000000000', self.userId, '',
-                                               '', sinNum, '', '', partTuple)
+                published = self.publisher.publish(999000.00, partTuple, 0,
+                                        '00000000-0000-0000-0000-000000000000',
+                                        self.userId, '00000000-0000-0000-0000-000000000000',
+                                        False, '00000000-0000-0000-0000-000000000000',
+                                        '', '', '', '', '')
+
+                # self.publisher.publish(999000.00, 0, '00000000-0000-0000-0000-000000000000', self.userId, '',
+                #                                '', sinNum, '', '', partTuple)
             except:
                 print ("Failed on Publish " + sinNum )
                 errorcnt = errorcnt+1
@@ -122,7 +128,7 @@ if __name__ == "__main__":
     LOGGER.info('Starting I-Tech DS Control.....')
 
     applicationId = '55555555-5555-5555-5555-55555555555'
-    applicationName =  'Python Pub and Sub Test V1.0'
+    applicationName =  'Python Pub and Sub Test'
 
     logging.basicConfig(level=logging.ERROR, format=LOG_FORMAT)  # less verbose
 
@@ -131,7 +137,7 @@ if __name__ == "__main__":
 
     dsInit = DS_Init(applicationId, applicationName)
 
-    dsParam = dsInit.getParams('settings.yaml', routingKeys, publications, None)
+    dsParam = dsInit.get_params('settings.yaml', routingKeys, publications, None)
 
     #aPublisher = Publisher(dsParam)
     aPublisher = dsParam.thePublisher
@@ -139,7 +145,7 @@ if __name__ == "__main__":
     fd = dsParam.firstData
 
     with open ('settings.yaml', 'r') as f:
-        appdata = yaml.load(f)
+        appdata = yaml.safe_load(f)
     appParams = APP_Parameters (appdata.get('loginDialog'), appdata.get('uiPath'))
 
     logger = DS_Logger(dsParam)
@@ -155,8 +161,8 @@ if __name__ == "__main__":
 
     # Create and start a subscriber thread
     aSubscriber = SubscriberFactory()
-    subscriber = aSubscriber.makeSubscriber(dsParam, userId, archiver, utilities)
-    subscriber.setName("SubscriberThread")
+    subscriber = aSubscriber.make_subscriber(dsParam, userId, archiver, utilities)
+#    subscriber.setName("SubscriberThread")
     try:
         subscriber.start()
         # subscriber.run()  # Start watching for messages we are subscribing to
