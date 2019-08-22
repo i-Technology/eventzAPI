@@ -18,7 +18,7 @@
 #  q = Queue(maxsize = 0)
 #
 # Publish and Subscribe parameters are to be passed in as parameters. These parameters can be set in a global file
-# e.g. "settings.yaml". The path to the settings file is provided to the dsInit.getParams method during initialization.
+# e.g. "settings.yaml". The path to the settings file is provided to the ds_init.getParams method during initialization.
 # The getParams method returns a DS_Parameters object that can be provided to many of the Eventz API methods.
 #
 # ***** DEPRECATED *******
@@ -86,7 +86,13 @@
 #       Modified DS_Parameters and it's arguments - made firstData optional defaulting to 16
 #       Modified non-pythonic method names to snake case from camel case
 #
-__version__ = '2.0.5'
+# Version 2.0.6 Bob Jackson
+#       More snake case conversions
+#       added master_archive to DS_Parameters to allow for local archives when there is no master archive
+
+
+
+__version__ = '2.0.6'
 
 import pika
 import uuid
@@ -125,38 +131,40 @@ class DS_Parameters(object):
 
     def __init__(self, exchange, brokerUserName, brokerPassword, brokerIP, sessionID, interTaskQueue, routingKeys,
                  publications, deviceId, deviceName, location, applicationId, applicationName, tenant, archivePath,
-                 encrypt, pathToCertificate, pathToKey, pathToCaCert, qt, brokerVirtual, thePublisher, firstData = 16):
+                 master_archive, encrypt, pathToCertificate, pathToKey, pathToCaCert, qt, brokerVirtual, thePublisher,
+                 firstData = 16):
 
         # RabbitMQ Parameters
-        self.brokerUserName = brokerUserName
-        self.brokerPassword = brokerPassword
-        self.brokerIP = brokerIP
+        self.broker_user_name = brokerUserName
+        self.broker_password = brokerPassword
+        self.broker_IP = brokerIP
         self.virtualhost = brokerVirtual
         self.exchange = exchange
 
         # self.myDBID = dbID        # Deprecated,
 
         # Encryption Parameters
-        self.pathToCaCert = pathToCaCert
-        self.pathToCertificate = pathToCertificate
-        self.pathToKey = pathToKey
+        self.path_to_CaCert = pathToCaCert
+        self.path_to_certificate = pathToCertificate
+        self.path_to_key = pathToKey
         self.encrypt = encrypt
 
         # Application parameters
-        self.sessionID = sessionID
-        self.archivePath = archivePath
-        self.deviceId = deviceId
-        self.deviceName = deviceName
+        self.session_id = sessionID
+        self.archive_path = archivePath
+        self.master_archive = master_archive
+        self.device_id = deviceId
+        self.device_name = deviceName
         self.location = location
-        self.applicationId = applicationId
-        self.applicationName = applicationName
+        self.application_id = applicationId
+        self.application_name = applicationName
         self.tenant = tenant
-        self.routingKeys = self.subscriptions = routingKeys # List of Record Types the application subscribes to
+        self.routing_keys = self.subscriptions = routingKeys # List of Record Types the application subscribes to
         self.publications = publications    # List of record type the application publishes
-        self.firstData = firstData           # Offset to data past the metadata
+        self.first_data = firstData           # Offset to data past the metadata
         self.qt = qt                            # True if Qt is the GUI
-        self.interTaskQueue = interTaskQueue    # For subscriber messages (non Qt GUIs)
-        self.thePublisher = thePublisher        # The one and only publisher object for the application
+        self.inter_task_queue = interTaskQueue    # For subscriber messages (non Qt GUIs)
+        self.the_publisher = thePublisher        # The one and only publisher object for the application
 
 #
 # The DS_Metadata Enum provides an index into the fields of metadata that pre-pend a DS record
@@ -206,15 +214,15 @@ class Publisher(object):
     def __init__(self,dsParam):
         self.dsParam = dsParam
         self.exchange = dsParam.exchange
-        self.brokerUserName = dsParam.brokerUserName
-        self.brokerPassword = dsParam.brokerPassword
-        self.brokerIP = dsParam.brokerIP
+        self.brokerUserName = dsParam.broker_user_name
+        self.brokerPassword = dsParam.broker_password
+        self.brokerIP = dsParam.broker_IP
         self.encrypt = dsParam.encrypt
-        self.applicationId = dsParam.applicationId
+        self.applicationId = dsParam.application_id
         self.tenant = dsParam.tenant
-        self.cert = dsParam.pathToCertificate
-        self.key = dsParam.pathToKey
-        self.CaCert = dsParam.pathToCaCert
+        self.cert = dsParam.path_to_certificate
+        self.key = dsParam.path_to_key
+        self.CaCert = dsParam.path_to_CaCert
         self.virtualhost = dsParam.virtualhost
         self.channel = None
         self.connection = False
@@ -241,7 +249,7 @@ class Publisher(object):
     tenant = 4
     userId = 5
     publishDateTime = 6
-    applicationId = 7
+    application_id = 7
     versionLink= 8
     versioned = 9
     sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
@@ -254,7 +262,7 @@ class Publisher(object):
 
         if self.channel is None or not self.channel.is_open:
             try:
-                self.dsParam.thePublisher.reconnect()
+                self.dsParam.the_publisher.reconnect()
             except:
                 LOGGER.error('Unable to connect to RabbitMQ server!!!')
                 return None
@@ -278,7 +286,7 @@ class Publisher(object):
         # Publish it
 
         rk = "{0:12.2f}".format(float(recordType)).strip()
-        self.publish_OK = self.dsParam.thePublisher.channel.basic_publish(exchange=self.exchange, routing_key=rk,
+        self.publish_OK = self.dsParam.the_publisher.channel.basic_publish(exchange=self.exchange, routing_key=rk,
                               body=str(data), properties=pika.BasicProperties(content_type="text/plain", delivery_mode=2, ),
                               )
         if self.publish_OK == None:
@@ -369,16 +377,16 @@ class AssuredPublisher(object):
     def __init__(self, dsParam):
 
         self.exchange = dsParam.exchange
-        self.brokerUserName = dsParam.brokerUserName
-        self.brokerPassword = dsParam.brokerPassword
-        self.brokerIP = dsParam.brokerIP
+        self.brokerUserName = dsParam.broker_user_name
+        self.brokerPassword = dsParam.broker_password
+        self.brokerIP = dsParam.broker_IP
         self.encrypt = dsParam.encrypt
-        self.applicationId = dsParam.applicationId
+        self.applicationId = dsParam.application_id
         self.tenant = dsParam.tenant
-        self.cert = dsParam.pathToCertificate
-        self.key = dsParam.pathToKey
-        self.CaCert = dsParam.pathToCaCert
-        self.virtualhost = dsParam.brokerVirtual
+        self.cert = dsParam.path_to_certificate
+        self.key = dsParam.path_to_key
+        self.CaCert = dsParam.path_to_CaCert
+        self.virtualhost = dsParam.virtualhost
 
         # Set up Broker connection
 
@@ -474,7 +482,7 @@ class AssuredPublisher(object):
 # copyright 2017 I-Technology Inc.
 #
 # parameter notes:
-#     routingKeys is the list of recordTypes that we need to subscribe to
+#     routing_keys is the list of recordTypes that we need to subscribe to
 # Usage:
 #     from Source.subscriberThread import subscriberThread
 #
@@ -490,7 +498,7 @@ class SubscriberFactory(object):
     copyright 2017 I-Technology Inc.
 
     parameter notes:
-        routingKeys is the list of recordTypes that we need to subscribe to
+        routing_keys is the list of recordTypes that we need to subscribe to
     Usage:
         from Source.subscriberThread import subscriberThread
 
@@ -509,7 +517,7 @@ class SubscriberFactory(object):
         return subscriber
 '''
     Creates a Subscribing QThread that connects to a Broker and subscribes to record types listed
-    in dsParam.routingKeys. Any messages passed by the Broker are passed on through Qt's signals
+    in ds_param.routing_keys. Any messages passed by the Broker are passed on through Qt's signals
     and slots facility to the main thread.
 '''
 
@@ -536,26 +544,26 @@ class QtSubscriber():
             # QThread.__init__(self)
 
             self.exchange = dsParam.exchange
-            self.brokerUserName = dsParam.brokerUserName
-            self.brokerPassword = dsParam.brokerPassword
-            self.brokerIP = dsParam.brokerIP
+            self.brokerUserName = dsParam.broker_user_name
+            self.brokerPassword = dsParam.broker_password
+            self.brokerIP = dsParam.broker_IP
             self.encrypt = dsParam.encrypt
-            self.applicationId = dsParam.applicationId
-            self.applicationName = dsParam.applicationName
+            self.applicationId = dsParam.application_id
+            self.applicationName = dsParam.application_name
             self.applicationUser = applicationUser
             self.tenant = dsParam.tenant
-            self.firstData = dsParam.firstData
-            self.archivePath = dsParam.archivePath
-            self.deviceId = dsParam.deviceId
-            self.deviceName = dsParam.deviceName
+            self.firstData = dsParam.first_data
+            self.archivePath = dsParam.archive_path
+            self.deviceId = dsParam.device_id
+            self.deviceName = dsParam.device_name
             self.location = dsParam.location
-            self.routingKeys = dsParam.routingKeys
+            self.routingKeys = dsParam.routing_keys
             self.systemRoutingKeys = ['9000010.00']
-            self.archivePath = dsParam.archivePath
+            self.archivePath = dsParam.archive_path
             self.utilities = utilities
-            self.cert = dsParam.pathToCertificate
-            self.key = dsParam.pathToKey
-            self.CaCert = dsParam.pathToCaCert
+            self.cert = dsParam.path_to_certificate
+            self.key = dsParam.path_to_key
+            self.CaCert = dsParam.path_to_CaCert
             self.virtualhost = dsParam.virtualhost
             self.channel = None
             self.queue_name = None
@@ -563,9 +571,9 @@ class QtSubscriber():
             self.myQueueName = (self.applicationName +  str(uuid.uuid4())).replace(" ", "")
 
             # Get the Publisher
-            self.aPublisher = dsParam.thePublisher
+            self.aPublisher = dsParam.the_publisher
             #
-            # workingRoutingKeys = self.routingKeys + self.systemRoutingKeys
+            # workingRoutingKeys = self.routing_keys + self.systemRoutingKeys
             #
             # for routingKey in workingRoutingKeys:
             #     self.channel.queue_bind(exchange=self.exchange, queue=self.queue_name, routing_key=routingKey)
@@ -796,14 +804,14 @@ class QtSubscriber():
 
 #
 # Creates a Subscribing Thread that connects to a Broker and subscribes to record types listed
-# in dsParam.routingKeys. Any messages passed by the Broker are passed on through an inter-task queue
+# in ds_param.routing_keys. Any messages passed by the Broker are passed on through an inter-task queue
 # to the main thread.
 #
 
 class NonQtSubscriber():
     '''
         Creates a Subscribing Thread that connects to a Broker and subscribes to record types listed
-        in dsParam.routingKeys. Any messages passed by the Broker are passed on through an inter-task queue
+        in ds_param.routing_keys. Any messages passed by the Broker are passed on through an inter-task queue
         to the main thread. For use with Guis using Tkinter or another non-Qt Gui
     '''
 
@@ -814,29 +822,29 @@ class NonQtSubscriber():
             Thread.__init__(self)
             # super(SubscriberThread, self).__init__()
 
-            self.interTaskQueue = dsParam.interTaskQueue
+            self.interTaskQueue = dsParam.inter_task_queue
             self.exchange = dsParam.exchange
-            self.brokerUserName = dsParam.brokerUserName
-            self.brokerPassword = dsParam.brokerPassword
-            self.brokerIP = dsParam.brokerIP
+            self.brokerUserName = dsParam.broker_user_name
+            self.brokerPassword = dsParam.broker_password
+            self.brokerIP = dsParam.broker_IP
             self.encrypt = dsParam.encrypt
-            self.applicationId = dsParam.applicationId
-            self.applicationName = dsParam.applicationName
+            self.applicationId = dsParam.application_id
+            self.applicationName = dsParam.application_name
             self.applicationUser = applicationUser
             self.tenant = dsParam.tenant
-            self.firstData = dsParam.firstData
-            self.archivePath = dsParam.archivePath
+            self.firstData = dsParam.first_data
+            self.archivePath = dsParam.archive_path
             self.utilities = utilities
-            self.deviceId = dsParam.deviceId
-            self.deviceName = dsParam.deviceName
+            self.deviceId = dsParam.device_id
+            self.deviceName = dsParam.device_name
             self.location = dsParam.location
-            self.routingKeys = dsParam.routingKeys
+            self.routingKeys = dsParam.routing_keys
             self.systemRoutingKeys = ['9000010.00']
             self.archiver = archiver
-            self.aPublisher = dsParam.thePublisher
-            self.cert = dsParam.pathToCertificate
-            self.key = dsParam.pathToKey
-            self.CaCert = dsParam.pathToCaCert
+            self.aPublisher = dsParam.the_publisher
+            self.cert = dsParam.path_to_certificate
+            self.key = dsParam.path_to_key
+            self.CaCert = dsParam.path_to_CaCert
             self.virtualhost = dsParam.virtualhost
             self.channel = None
             self.queue_name = None
@@ -1064,7 +1072,7 @@ class NonQtSubscriber():
             def createSubscriberTask(self):
                 return self.SubscriberThread(self)
 
-    # return SubscriberThread(dsParam, applicationUser, archiver)
+    # return SubscriberThread(ds_param, applicationUser, archiver)
 
 #
 # Classes for enabling queries of the Archive through the Librarian
@@ -1132,13 +1140,13 @@ class LibrarianClient(object):
 
     def __init__(self, dsParam, logger):
 
-        self.brokerIP = dsParam.brokerIP
-        self.brokerUserName = dsParam.brokerUserName
-        self.brokerPassword = dsParam.brokerPassword
+        self.brokerIP = dsParam.broker_IP
+        self.brokerUserName = dsParam.broker_user_name
+        self.brokerPassword = dsParam.broker_password
         self.encrypt = dsParam.encrypt
-        self.cert = dsParam.pathToCertificate
-        self.key = dsParam.pathToKey
-        self.CaCert = dsParam.pathToCaCert
+        self.cert = dsParam.path_to_certificate
+        self.key = dsParam.path_to_key
+        self.CaCert = dsParam.path_to_CaCert
         self.vitualhost = dsParam.virtualhost
 
         self.logger = logger
@@ -1222,7 +1230,7 @@ class LibrarianClient(object):
             self.logger.log('Eventz', 0, 0, 0, 'Librarian not responding')
             return None
 
-        # def log(self, userID, errorType, errorLevel, errorAction, errorText):
+        # def log(self, user_id, errorType, errorLevel, errorAction, errorText):
 
         t.cancel()
         return ast.literal_eval(self.response.decode("utf_8"))
@@ -1261,17 +1269,17 @@ class to_json(json.JSONEncoder):
 class DS_Init(object):
     '''
     DS_Init loads parameters from a .yaml file into a DS_Parameters object through the getParams method
-    e.g. getParams(configurationfile, routingKeys, publications, publisher)
+    e.g. getParams(configurationfile, routing_keys, publications, publisher)
     where:
         configurationfile is a string giving the path to the .yaml file holding some of the parameters
-        routingKeys if a list of record types that the application is subscribing to.
+        routing_keys if a list of record types that the application is subscribing to.
         publications is a list of the record types that the allication publishes.
         publisher is the Publisher object instantiated in the calling programme
 
         additional parameters come from the constructor, namely:
 
-        applicationId is a uuid identifier unique to the application and is hard coded by the developer.
-        applicationName is a string containing a name and version designation and is hard coded by the developer.
+        application_id is a uuid identifier unique to the application and is hard coded by the developer.
+        application_name is a string containing a name and version designation and is hard coded by the developer.
         interTaskQueue is a Queue object used by non-Qt guis to pass data from the subscriber task to the main
             application. Initially it defaults to None. The getParams method  will create this queue if the qt parameter
             is False
@@ -1299,6 +1307,7 @@ class DS_Init(object):
                 location = condata['location']
                 tenant = condata['tenant']
                 localArchivePath = condata['localArchivePath']
+                master_archive = condata['master_archive']
                 firstData = condata['firstData']
                 encrypt = condata['encrypt']
                 pathTocacert = condata['pathTocacert']
@@ -1328,13 +1337,13 @@ class DS_Init(object):
 
         dsParam = DS_Parameters( brokerExchange, brokerUserName, brokerPassword, brokerIP, sessionId, self.interTaskQueue,
                                  routingKeys, publications, deviceId, deviceName, location, self.applicationId,
-                                 self.applicationName, tenant, localArchivePath, encrypt, pathToCertificate,
-                                 pathToKey, pathTocacert, qt, brokerVirtual, publisher, firstData)
+                                 self.applicationName, tenant, localArchivePath, master_archive, encrypt,
+                                 pathToCertificate, pathToKey, pathTocacert, qt, brokerVirtual, publisher, firstData)
 
         # Create the Publisher for the application
         aPublisher = Publisher(dsParam)
         # Put it in the parameters
-        dsParam.thePublisher = aPublisher
+        dsParam.the_publisher = aPublisher
 
         return (dsParam)
 
@@ -1429,8 +1438,8 @@ class DS_Utility(object):
         if (localList != None ):
             rdr = localList
         else:
-            if self.dsParam.archivePath != '':
-                f = open(self.dsParam.archivePath, encoding='utf_8', newline='')
+            if self.dsParam.archive_path != '':
+                f = open(self.dsParam.archive_path, encoding='utf_8', newline='')
                 rdr = csv.reader(f, delimiter="\t")
             else:
                 return []    # Empty List if wanting Archive and there is none
@@ -1584,11 +1593,11 @@ class DS_Utility(object):
 
         # g.users.items())[g.currentUser]
 
-        if self.dsParam.archivePath != "":
-            self.refresh_archive(userId, self.dsParam.archivePath, self.dsParam.tenant, self.dsParam.routingKeys)
+        if self.dsParam.archive_path != "" and self.dsParam.master_archive:
+            self.refresh_archive(userId, self.dsParam.archive_path, self.dsParam.tenant, self.dsParam.routing_keys)
 
-        startRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
-                       self.dsParam.applicationId, self.dsParam.applicationName, myTime, self.dsParam.subscriptions,
+        startRecord = (self.dsParam.device_id, self.dsParam.device_name, self.dsParam.location,
+                       self.dsParam.application_id, self.dsParam.application_name, myTime, self.dsParam.subscriptions,
                        self.dsParam.publications, pid)
 
         aPublisher.publish(9000000.00, startRecord, RecordAction.INSERT.value,
@@ -1607,8 +1616,8 @@ class DS_Utility(object):
         myTime = datetime.datetime.utcnow().isoformat(sep='T')
         pid = os.getpid()
 
-        stopRecord = (self.dsParam.deviceId, self.dsParam.deviceName, self.dsParam.location,
-                       self.dsParam.applicationId, self.dsParam.applicationName, myTime, pid)
+        stopRecord = (self.dsParam.device_id, self.dsParam.device_name, self.dsParam.location,
+                       self.dsParam.application_id, self.dsParam.application_name, myTime, pid)
 
         aPublisher.publish(9000001.00, stopRecord, RecordAction.INSERT.value,
                            '00000000-0000-0000-0000-000000000000',
@@ -1652,15 +1661,15 @@ class DS_Logger(object):
     def __init__(self, dsParam):
 
         self.exchange = dsParam.exchange
-        self.brokerUserName = dsParam.brokerUserName
-        self.brokerPassword = dsParam.brokerPassword
-        self.brokerIP = dsParam.brokerIP
+        self.brokerUserName = dsParam.broker_user_name
+        self.brokerPassword = dsParam.broker_password
+        self.brokerIP = dsParam.broker_IP
         self.encrypt = dsParam.encrypt
-        self.deviceId =  dsParam.deviceId
-        self.deviceName =  dsParam.deviceName
+        self.deviceId =  dsParam.device_id
+        self.deviceName =  dsParam.device_name
         self.location = dsParam.location
-        self.applicationId = dsParam.applicationId
-        self.applicationName =  dsParam.applicationName
+        self.applicationId = dsParam.application_id
+        self.applicationName =  dsParam.application_name
         self.tenant = dsParam.tenant
 
 
@@ -1674,7 +1683,7 @@ class DS_Logger(object):
 
     def log(self, userID, errorType, errorLevel, errorAction, errorText):
 
-        logPublisher = self.dsParam.thePublisher
+        logPublisher = self.dsParam.the_publisher
         # logPublisher = Publisher(self.exchange, self.brokerUserName, self.brokerPassword, self.brokerIP, self.dbID)
 
         logTuple = (self.deviceId, self.deviceName, self.location, self.applicationId, self.applicationName, errorType,
