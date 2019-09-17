@@ -1,7 +1,7 @@
 #
-# Eventz API
+# eventzAPI API
 #
-# A Programmer's Interface that provides objects needed to implement an Eventz Application
+# A Programmer's Interface that provides objects needed to implement an eventzAPI Application
 #
 # COPYRIGHT 2016 - 2017 I-Technology Inc
 # all rights reserved
@@ -19,7 +19,7 @@
 #
 # Publish and Subscribe parameters are to be passed in as parameters. These parameters can be set in a global file
 # e.g. "settings.yaml". The path to the settings file is provided to the ds_init.getParams method during initialization.
-# The getParams method returns a DS_Parameters object that can be provided to many of the Eventz API methods.
+# The getParams method returns a DS_Parameters object that can be provided to many of the eventzAPI API methods.
 #
 # ***** DEPRECATED *******
 # Database identifier. This identifier is prepended to DS messages so that when a subscriber receives
@@ -938,8 +938,11 @@ class NonQtSubscriber():
             LOGGER.info('Subscriber Thread Terminating')
             if not self.channel is None:
                 if self.channel.is_open:
-                    self.channel.stop_consuming()
-                    self.channel.queue_delete(queue=self.queue_name)
+                    try:
+                        self.channel.stop_consuming()
+                        self.channel.queue_delete(queue=self.queue_name)
+                    except:
+                        print('Terminating Subscriber!')
     #                    self.connection.close()
     #                    self.stop()
 
@@ -1227,7 +1230,7 @@ class LibrarianClient(object):
             LOGGER.warning('Librarian not responding')
             print(self, 'Librarian not responding')
             t.cancel()
-            self.logger.log('Eventz', 0, 0, 0, 'Librarian not responding')
+            self.logger.log('eventzAPI', 0, 0, 0, 'Librarian not responding')
             return None
 
         # def log(self, user_id, errorType, errorLevel, errorAction, errorText):
