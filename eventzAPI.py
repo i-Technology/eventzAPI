@@ -90,7 +90,8 @@
 #       More snake case conversions
 #       added master_archive to DS_Parameters to allow for local archives when there is no master archive
 
-
+import PyQt5.QtCore
+from PyQt5.QtCore import pyqtSignal, QThread
 
 __version__ = '2.0.6'
 
@@ -247,7 +248,7 @@ class Publisher(object):
     recordId = 2
     link = 3
     tenant = 4
-    userId = 5
+    user_id = 5
     publishDateTime = 6
     application_id = 7
     versionLink= 8
@@ -527,15 +528,16 @@ class QtSubscriber():
     A subscriber thread for use with a Gui generated using Qt (PyQt5)
     '''
 
-    from PyQt5 import QtCore
+    # from PyQt5 import QtCore
+    # from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
     # Make a Qt Subscriber Thread
 
-    class SubscriberThread(QtCore.QThread):
+    class SubscriberThread(QThread):
 
-        from PyQt5.QtCore import Qt, pyqtSignal, QThread
+        # from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
-        pubIn = pyqtSignal(str, str)
+        pub_in = pyqtSignal(str, str)
 
         def __init__(self, dsParam, applicationUser, archiver, utilities):
 
@@ -567,6 +569,7 @@ class QtSubscriber():
             self.virtualhost = dsParam.virtualhost
             self.channel = None
             self.queue_name = None
+            # self.pub_in = self.pub_in
 
             self.myQueueName = (self.applicationName +  str(uuid.uuid4())).replace(" ", "")
 
@@ -586,16 +589,21 @@ class QtSubscriber():
             # Set up RabbitMQ connection
 
             if not self.encrypt:
-                parameters = pika.ConnectionParameters(host = self.brokerIP,
-                                                       port = 5672,
-                                                       virtual_host = self.virtualhost,
-                                                       credentials = (pika.PlainCredentials(self.brokerUserName ,self.brokerPassword)),
-                                                       heartbeat_interval=600,
-                                                       ssl=False,
-                                                       socket_timeout=10,
-                                                       blocked_connection_timeout=10,
-                                                       retry_delay=3,
-                                                       connection_attempts=5)
+                try:
+                    parameters = pika.ConnectionParameters(host = self.brokerIP,
+                                                           port = 5672,
+                                                           virtual_host = self.virtualhost,
+                                                           credentials = (pika.PlainCredentials(self.brokerUserName ,
+                                                                                                self.brokerPassword)),
+                                                           heartbeat=600,
+                                                           ssl_options=None,
+                                                           socket_timeout=10,
+                                                           blocked_connection_timeout=10,
+                                                           retry_delay=3,
+                                                           connection_attempts=5)
+                except Exception as exception:
+                    print(type(exception))
+                    print(exception)
             else:
                 parameters = pika.ConnectionParameters(host = self.brokerIP,
                                                        port = 5671,
