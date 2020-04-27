@@ -89,11 +89,25 @@
 # Version 2.0.6 Bob Jackson
 #       More snake case conversions
 #       added master_archive to DS_Parameters to allow for local archives when there is no master archive
+#
+# Version 2.0.7 Bob Jackson
+#      Up version for PyPi
+#
+# Version 2.0.8 Bob Jackson
+#      Up version for PyPi
+#
+# Version 2.0.9 Bob Jackson
+#      Up version for PyPi
+#
+# Version 2.0.10 Bob Jackson
+#      Fix problem with pub_in in QtSubscriber
+#
+
 
 import PyQt5.QtCore
 from PyQt5.QtCore import pyqtSignal, QThread
 
-__version__ = '2.0.6'
+__version__ = '2.0.10'
 
 import pika
 import uuid
@@ -183,7 +197,7 @@ class DS_MetaData(Enum):
     userId = 5
     publishDateTime = 6
     applicationId = 7
-    versionLink= 8
+    versionLink = 8
     versioned = 9
     sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
     userMetadata1 = 11      # User defined fields for query filtering
@@ -243,22 +257,22 @@ class Publisher(object):
         There is to be one publisher keeping one channel open. It is passed through DS_Parameters
         to functions that need to publish
 
-    recordType = 0
-    action = 1
-    recordId = 2
-    link = 3
-    tenant = 4
-    user_id = 5
-    publishDateTime = 6
-    application_id = 7
-    versionLink= 8
-    versioned = 9
-    sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
-    userMetadata1 = 11      # User defined fields for query filtering
-    userMetadata2 = 12
-    userMetadata3 = 13
-    userMetadata3 = 14
-    userMetadata3 = 15
+        recordType = 0
+        action = 1
+        recordId = 2
+        link = 3
+        tenant = 4
+        userId = 5
+        publishDateTime = 6
+        applicationId = 7
+        versionLink = 8
+        versioned = 9
+        sessionId = 10          # UUID identifying the user's session so as not to confuse with other user's records
+        userMetadata1 = 11      # User defined fields for query filtering
+        userMetadata2 = 12
+        userMetadata3 = 13
+        userMetadata4 = 14
+        userMetadata5 = 15
         '''
 
         if self.channel is None or not self.channel.is_open:
@@ -534,16 +548,22 @@ class QtSubscriber():
     # Make a Qt Subscriber Thread
 
     class SubscriberThread(QThread):
+        '''
+        Make a QT subscriber thread (QThread)
+        Notify parent that a message has been received using QTs signal and slot mechanism
+        Process System Messages (9000000.00 - 9100000.99) in this thread
+        '''
 
         # from PyQt5.QtCore import Qt, pyqtSignal, QThread
 
-        pub_in = pyqtSignal(str, str)
+        pub_in = pyqtSignal(str, str)           # Class variable
 
         def __init__(self, dsParam, applicationUser, archiver, utilities):
 
-            super().__init__()
+            # super().__init__()
             # super(SubscriberThread, self).__init__(self)
             # QThread.__init__(self)
+            QThread.__init__(self, None)
 
             self.exchange = dsParam.exchange
             self.brokerUserName = dsParam.broker_user_name
@@ -556,12 +576,12 @@ class QtSubscriber():
             self.tenant = dsParam.tenant
             self.firstData = dsParam.first_data
             self.archivePath = dsParam.archive_path
+            self.master_archive = dsParam.master_archive
             self.deviceId = dsParam.device_id
             self.deviceName = dsParam.device_name
             self.location = dsParam.location
             self.routingKeys = dsParam.routing_keys
             self.systemRoutingKeys = ['9000010.00']
-            self.archivePath = dsParam.archive_path
             self.utilities = utilities
             self.cert = dsParam.path_to_certificate
             self.key = dsParam.path_to_key
@@ -670,13 +690,17 @@ class QtSubscriber():
         #
 
         def stop(self):
-            LOGGER.info('Subscriber Thread Terminating')
-            self.channel.stop_consuming()
-            self.channel.queue_delete(queue=self.queue_name)
-            LOGGER.error('Subscriber Thread Terminating1')
-            self.connection.close()
-            LOGGER.error('Subscriber Thread Terminating2')
-            #self.stop()
+            try:
+                LOGGER.info('Subscriber Thread Terminating')
+                if self.channel.is_open:
+                    self.channel.stop_consuming()
+                    self.channel.queue_delete(queue=self.queue_name)
+                LOGGER.error('Subscriber Thread Terminating1')
+                self.connection.close()
+                LOGGER.error('Subscriber Thread Terminating2')
+            except Exception as e:
+                self.connection.process_data_events()
+                print(e)
 
         #
         # Bind the queue to a record type (routing key)
@@ -695,22 +719,30 @@ class QtSubscriber():
         #
 
         def alert_main_app(self, bodyTuple):
+        # def alert_main_app(self, bodyTuple):
+            '''
+             Pass the message on to the main application. If local_archive exists then append the message to it.
+            :param bodyTuple:
+            :return:
+            '''
 
             # Write the Local Archive if we are subscribing to this record type
 
             recordType = rt = bodyTuple[0]
 
-            if rt in self.routingKeys or '#' in self.routingKeys:       # Do we care aboutthis message ??
+            if rt in self.routingKeys or '#' in self.routingKeys:         # Do we care aboutthis message ??
 
-                if len(self.archivePath) > 0:           # Local Archive ??
-                    self.utilities.archive(bodyTuple, self.archivePath)   # If so put it in the local archive
+                if len(self.archivePath) > 0 and self.master_archive:     # Write access to Local Archive ??
+                    self.utilities.archive(bodyTuple, self.archivePath)     # If so put it in the local archive
 
 
                 # Alert the main loop
 
                 recordType = bodyTuple[0]
                 btz = '{0}'.format(bodyTuple)
-                self.pubIn.emit(recordType, btz)
+                self.pub_in.emit(recordType, btz)
+                # self.__class__.pub_in.emit(recordType, btz)
+                # self.pubIn.emit(recordType, btz)
                 LOGGER.info("Emitted Alert for: ", str(recordType))
                 print("Emitted Alert for: ", str(recordType))
 
@@ -842,6 +874,7 @@ class NonQtSubscriber():
             self.tenant = dsParam.tenant
             self.firstData = dsParam.first_data
             self.archivePath = dsParam.archive_path
+            self.master_archive = dsParam.master_archive
             self.utilities = utilities
             self.deviceId = dsParam.device_id
             self.deviceName = dsParam.device_name
@@ -978,8 +1011,8 @@ class NonQtSubscriber():
 
             if (rt in self.routingKeys or '#' in self.routingKeys):     # Do we care about this message ??
 
-                if len(self.archivePath) > 0:                           # Do we have a local archive ??
-                    self.utilities.archive(bodyTuple, self.archivePath)   # If so put it in the local archive
+                if len(self.archivePath) > 0 and self.master_archive:     # Do we have write access to a local archive ??
+                    self.utilities.archive(bodyTuple, self.archivePath)     # If so put it in the local archive
 
                 # Alert the main loop
 
@@ -1213,6 +1246,8 @@ class LibrarianClient(object):
         result = self.channel.queue_declare('', exclusive=True)
         self.callback_queue = result.method.queue
 
+        self.channel.basic_qos(prefetch_size=0, prefetch_count=10)
+
         self.channel.basic_consume(self.callback_queue , on_message_callback=self.on_response, auto_ack=True)
 
         qdList = []
@@ -1304,7 +1339,7 @@ class DS_Init(object):
         self.interTaskQueue = None
 
     def get_params(self, configurationfile, routingKeys, publications, publisher):
-        LOGGER.info('Reading configuration File')
+        LOGGER.info(f"Reading configuration File: {configurationfile}")
         try:
             with open (configurationfile, 'r') as f:
                 condata = yaml.safe_load(f)
@@ -1438,12 +1473,14 @@ class DS_Utility(object):
                     LOGGER.info('Data Transferred from Archive. Wrote %s records.', recordCount)
 
 
-    #
-    # update either a list or localarchive. To removed all records that have
-    # been updated or delected. will also remove and records that are not yours by comparing
-    # the tenant records.
-
     def update_archive(self, loggedInUser, tenant, localList=None):
+
+        '''
+        update_archive(self, loggedInUser, tenant, localList=None)
+        update either a list or localarchive. To removed all records that have
+        been updated or delected. will also remove records that are not yours by comparing
+        the tenant field against the tenant parameter.
+        '''
 
         updateList =[]
         if (localList != None ):
@@ -1516,14 +1553,13 @@ class DS_Utility(object):
     #
 
     def match(self, table, column, target):
-        """
-        Find row in table that has a value in column that equals target
-        :rtype: int
-        """
+        """Find a record in a table where the data in 'column' matches the 'target'. Return the row # or -1 if no match found.
+            The table is a QT QTableWidget
+            :rtype: int
 
+            This is QT specific
 
-        # This is QT specific
-        #LOGGER.info('Rows: %i',table.rowCount())
+        """
         if self.qt:
             from PyQt5 import QtCore
             from PyQt5.QtCore import Qt, pyqtSignal
@@ -1604,6 +1640,7 @@ class DS_Utility(object):
 
         # g.users.items())[g.currentUser]
 
+        # Restore a local archive if master_archive == True
         if self.dsParam.archive_path != "" and self.dsParam.master_archive:
             self.refresh_archive(userId, self.dsParam.archive_path, self.dsParam.tenant, self.dsParam.routing_keys)
 
