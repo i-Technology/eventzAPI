@@ -589,6 +589,7 @@ class QtSubscriber():
             self.virtualhost = dsParam.virtualhost
             self.channel = None
             self.queue_name = None
+            self.running = True
             # self.pub_in = self.pub_in
 
             self.myQueueName = (self.applicationName +  str(uuid.uuid4())).replace(" ", "")
@@ -661,11 +662,12 @@ class QtSubscriber():
 
 
         def run(self):
-            if self.channel is None or not self.channel.is_open:
-                try:
-                    self.reconnect()
-                except:
-                    LOGGER.error('Unable to connect to RabbitMQ server!!!')
+            if self.running:
+                if self.channel is None or not self.channel.is_open:
+                    try:
+                        self.reconnect()
+                    except:
+                        LOGGER.error('Unable to connect to RabbitMQ server!!!')
 
             LOGGER.info("Running Subscriber Thread.")
 
@@ -692,8 +694,9 @@ class QtSubscriber():
         def stop(self):
             try:
                 LOGGER.info('Subscriber Thread Terminating')
+                self.running = False
                 if self.channel.is_open:
-                    self.channel.stop_consuming()
+                    # self.channel.stop_consuming()
                     self.channel.queue_delete(queue=self.queue_name)
                 LOGGER.error('Subscriber Thread Terminating1')
                 self.connection.close()
