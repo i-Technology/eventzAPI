@@ -676,6 +676,7 @@ class QtSubscriber():
             # Create the local archive if none and we want one
             if len(self.archivePath) > 0 and os.path.isfile(self.archivePath) == 0:
                 # if os.path.isfile(self.archivePath) == 0:
+                LOGGER.info("Creating new local archive")
                 file = open(self.archivePath, "a", newline='')
                 file.close()
 
@@ -1253,6 +1254,14 @@ class LibrarianClient(object):
 
         self.channel.basic_consume(self.callback_queue , on_message_callback=self.on_response, auto_ack=True)
 
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self, userName, tenant, startDate, endDate, limit, queries):
+
+        # Prepare the query(s)
         qdList = []
         t = threading.Timer(60, self.timerExpired) # Query timeout
         for q in queries:
