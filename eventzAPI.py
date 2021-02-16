@@ -102,12 +102,16 @@
 # Version 2.0.10 Bob Jackson
 #      Fix problem with pub_in in QtSubscriber
 #
+# Version 2.0.11 Bob Jackson
+#       Add ApplicationInitializer class
+#       Take archiver out of Subscriber classes
+#
 
 
 import PyQt5.QtCore
 from PyQt5.QtCore import pyqtSignal, QThread
 
-__version__ = '2.0.10'
+__version__ = '2.0.11'
 
 import pika
 import uuid
@@ -214,6 +218,46 @@ class RecordAction(Enum):
     INSERT = 0
     UPDATE = 1
     DELETE = 2
+#
+# Eventz Application Initializer
+# To be instantiated and used to put in place the Eventz objects needed foe a publish & subscribe
+# appliction
+#
+
+class ApplicationInitializer(object):
+    '''
+    Eventz Application Initializer
+    To be instantiated and used to put in place the Eventz objects needed foe a publish & subscribe
+    appliction
+'''
+
+    def __init__(self, routing_keys, publications, applicationId, applicationName, path_to_settings, user_id):
+        self.routing_keys = routing_keys
+        self.publications = publications
+        self.applicationId = applicationId
+        self.applicationName = applicationName
+        self.path_to_settings = path_to_settings
+        self.user_id = user_id
+
+    pass
+
+    def initialize(self):
+        dsInit = DS_Init(self.applicationId, self.applicationName)
+        ds_param = dsInit.get_params(self.path_to_settings, self.routing_keys, self.publications, None)
+        a_publisher = ds_param.the_publisher
+        user_id = 'Starting - No user yet.'
+
+        logger = DS_Logger(ds_param)
+        librarian_client = LibrarianClient(ds_param, logger)
+        utilities = DS_Utility(logger, librarian_client, ds_param, 'I-Tech')
+        utilities.start_application(a_publisher, user_id)
+
+        # Create and start a subscriber thread
+        a_subscriber = SubscriberFactory()
+        self.subscriber = a_subscriber.make_subscriber(ds_param, self.user_id, utilities)
+        self.subscriber.start()
+
+        return a_publisher, self.subscriber, logger, LibrarianClient, utilities
 
 #
 # The Publisher provides a mechanism for publishing data to the Broker.
@@ -522,12 +566,12 @@ class SubscriberFactory(object):
         self.subscriberThread.stop()  # Stop thread when application closes
     '''
 
-    def make_subscriber(self, dsParam, applicationUser, archiver, utilities):
+    def make_subscriber(self, dsParam, applicationUser, utilities):
 
         if dsParam.qt:
-            subscriber = QtSubscriber().SubscriberThread(dsParam, applicationUser, archiver, utilities)
+            subscriber = QtSubscriber().SubscriberThread(dsParam, applicationUser, utilities)
         else:
-            subscriber = NonQtSubscriber().SubscriberThread(dsParam, applicationUser, archiver, utilities)
+            subscriber = NonQtSubscriber().SubscriberThread(dsParam, applicationUser, utilities)
 
         return subscriber
 '''
@@ -558,7 +602,7 @@ class QtSubscriber():
 
         pub_in = pyqtSignal(str, str)           # Class variable
 
-        def __init__(self, dsParam, applicationUser, archiver, utilities):
+        def __init__(self, dsParam, applicationUser, utilities):
 
             # super().__init__()
             # super(SubscriberThread, self).__init__(self)
@@ -685,7 +729,11 @@ class QtSubscriber():
 
             # Get next request
             self.channel.basic_consume(self.queue_name, on_message_callback=self.callback, auto_ack=True)
-            self.channel.start_consuming()
+
+            try:
+                self.channel.start_consuming()
+            except pika.exceptions.StreamLostError:
+                LOGGER.info("Stream Lost")
             LOGGER.error("Should never get here !!!")
         #
         # Close connections to RabbitMQ and stop the thread
@@ -861,7 +909,7 @@ class NonQtSubscriber():
 
     class SubscriberThread(Thread):
 
-        def __init__(self, dsParam, applicationUser, archiver, utilities):
+        def __init__(self, dsParam, applicationUser, utilities):
 
             Thread.__init__(self)
             # super(SubscriberThread, self).__init__()
@@ -885,7 +933,7 @@ class NonQtSubscriber():
             self.location = dsParam.location
             self.routingKeys = dsParam.routing_keys
             self.systemRoutingKeys = ['9000010.00']
-            self.archiver = archiver
+            # self.archiver = archiver
             self.aPublisher = dsParam.the_publisher
             self.cert = dsParam.path_to_certificate
             self.key = dsParam.path_to_key
@@ -984,10 +1032,14 @@ class NonQtSubscriber():
             if not self.channel is None:
                 if self.channel.is_open:
                     try:
-                        self.channel.stop_consuming()
                         self.channel.queue_delete(queue=self.queue_name)
-                    except:
+                        self.channel.stop_consuming()
+                        self.connection.close()
                         print('Terminating Subscriber!')
+                    except:
+                        self.channel.queue_delete(queue=self.queue_name)
+                        self.connection.close()
+                        print('Terminating Subscriber! ex')
     #                    self.connection.close()
     #                    self.stop()
 
@@ -1172,7 +1224,7 @@ class LibrarianClient(object):
     '''
     The Librarian Client, when instantiated, accepts dsQuery objects, connects to the Librarian microservice,
     sends the query and awaits a response. When the response arrives it closes the connection and returns the
-    response to the caller. Querys are passe using the call method
+    response to the caller. Querys are passed using the call method
     e.g. call(userName, tenant, startDate, endDate, limit, queries)
     where:
         userName is an ascii string identifying who is making the query
@@ -1200,13 +1252,6 @@ class LibrarianClient(object):
         self.logger = logger
 
         self.timeout = False
-
-
-    def on_response(self, ch, method, props, body):
-        if self.corr_id == props.correlation_id:
-            self.response = body
-
-    def call(self, userName, tenant, startDate, endDate, limit, queries):
 
         if not self.encrypt:
             parameters = pika.ConnectionParameters(host=self.brokerIP,
