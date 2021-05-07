@@ -106,12 +106,19 @@
 #       Add ApplicationInitializer class
 #       Take archiver out of Subscriber classes
 #
+# Version 2.0.12 Bob Jackson
+#      Up version for PyPi
+#
+#
+# Version 2.0.13 Bob Jackson
+#      Added 'parameters' to the return values from ApplicationInitialzer.initialize()
+#
 
 
 import PyQt5.QtCore
 from PyQt5.QtCore import pyqtSignal, QThread
 
-__version__ = '2.0.11'
+__version__ = '2.0.13'
 
 import pika
 import uuid
@@ -228,7 +235,13 @@ class ApplicationInitializer(object):
     '''
     Eventz Application Initializer
     To be instantiated and used to put in place the Eventz objects needed foe a publish & subscribe
-    appliction
+        application:
+        publisher: The publisher object handles the publication os event records.
+        subscriber: The subscriber task watches for event records in routing_keys and passes them to the app.
+        logger: The logger publishes log eventz records (90000002.00)
+        LibrarianClient: The librarian client submits queries to the Librarian service and returns the result set.
+        utilities: The utlities object has many methods that aid the process.
+        parameters: The parameters object containd argument values that are used by the eventzAPI objects.
 '''
 
     def __init__(self, routing_keys, publications, applicationId, applicationName, path_to_settings, user_id):
@@ -243,21 +256,21 @@ class ApplicationInitializer(object):
 
     def initialize(self):
         dsInit = DS_Init(self.applicationId, self.applicationName)
-        ds_param = dsInit.get_params(self.path_to_settings, self.routing_keys, self.publications, None)
-        a_publisher = ds_param.the_publisher
+        parameters = dsInit.get_params(self.path_to_settings, self.routing_keys, self.publications, None)
+        publisher = parameters.the_publisher
         user_id = 'Starting - No user yet.'
 
-        logger = DS_Logger(ds_param)
-        librarian_client = LibrarianClient(ds_param, logger)
-        utilities = DS_Utility(logger, librarian_client, ds_param, 'I-Tech')
-        utilities.start_application(a_publisher, user_id)
+        logger = DS_Logger(parameters)
+        librarian_client = LibrarianClient(parameters, logger)
+        utilities = DS_Utility(logger, librarian_client, parameters, 'I-Tech')
+        utilities.start_application(publisher, user_id)
 
         # Create and start a subscriber thread
         a_subscriber = SubscriberFactory()
-        self.subscriber = a_subscriber.make_subscriber(ds_param, self.user_id, utilities)
-        self.subscriber.start()
+        subscriber = a_subscriber.make_subscriber(parameters, self.user_id, utilities)
+        subscriber.start()
 
-        return a_publisher, self.subscriber, logger, LibrarianClient, utilities
+        return publisher, subscriber, logger, librarian_client, utilities, parameters
 
 #
 # The Publisher provides a mechanism for publishing data to the Broker.
