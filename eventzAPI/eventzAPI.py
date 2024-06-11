@@ -113,10 +113,15 @@
 # Version 2.0.13 Bob Jackson
 #      Added 'parameters' to the return values from ApplicationInitialzer.initialize()
 #
+#
+# Version 2.1.0 Bob Jackson
+#      Fixed problem with Master Archive and local archive settings - If you want a local archive populate this parameter.
+#       If you want the local archive initialized from the master then set Master Archive to true
+#
 
 
-import PyQt5.QtCore
-from PyQt5.QtCore import pyqtSignal, QThread
+import PyQt6.QtCore
+from PyQt6.QtCore import pyqtSignal, QThread
 
 __version__ = '2.0.13'
 
@@ -352,19 +357,27 @@ class Publisher(object):
             self.applicationId = '00000000-0000-0000-0000-000000000000'
 
         data = (recordTypeSz, action, recordId, link, self.tenant, userId,
-                datetime.datetime.utcnow().isoformat(sep='T'), self.applicationId, versionLink, versioned, sessionID,
+                datetime.datetime.now(datetime.UTC).isoformat(sep='T'), self.applicationId, versionLink, versioned, sessionID,
                 umd1, umd2, umd3, umd4, umd5) + dataTuple
 
         # Publish it
 
         rk = "{0:12.2f}".format(float(recordType)).strip()
-        self.publish_OK = self.dsParam.the_publisher.channel.basic_publish(exchange=self.exchange, routing_key=rk,
+        counter = 0
+        success = False
+        while not success and counter < 5:
+            try:
+                self.publish_OK = self.dsParam.the_publisher.channel.basic_publish(exchange=self.exchange, routing_key=rk,
                               body=str(data), properties=pika.BasicProperties(content_type="text/plain", delivery_mode=2, ),
                               )
-        if self.publish_OK == None:
-            return str(data)
-        else:
+                success = True
+            except:
+                counter += 1
+
+        if success == False:
             return None
+        else:
+            return str(data)
 
     #
     # Publish a tuple that already has the metadata
@@ -529,7 +542,7 @@ class AssuredPublisher(object):
             applicationId = '00000000-0000-0000-0000-000000000000'
 
         data = (recordType, action, recordId, link, self.tenant, userId,
-                datetime.datetime.utcnow().isoformat(sep='T'), applicationId, umd1, umd2, umd3, umd4,
+                datetime.datetime.now(datetime.UTC).isoformat(sep='T'), applicationId, umd1, umd2, umd3, umd4,
                 umd5) + dataTuple
 
         # Publish it
@@ -797,7 +810,8 @@ class QtSubscriber():
 
             if rt in self.routingKeys or '#' in self.routingKeys:         # Do we care aboutthis message ??
 
-                if len(self.archivePath) > 0 and self.master_archive:     # Write access to Local Archive ??
+                # if len(self.archivePath) > 0 and self.master_archive:     # Write access to Local Archive ??
+                if len(self.archivePath) > 0 :  # Write access to Local Archive ??
                     self.utilities.archive(bodyTuple, self.archivePath)     # If so put it in the local archive
 
 
@@ -1080,7 +1094,7 @@ class NonQtSubscriber():
 
             if (rt in self.routingKeys or '#' in self.routingKeys):     # Do we care about this message ??
 
-                if len(self.archivePath) > 0 and self.master_archive:     # Do we have write access to a local archive ??
+                if len(self.archivePath) > 0 :     # Do we have write access to a local archive ??
                     self.utilities.archive(bodyTuple, self.archivePath)     # If so put it in the local archive
 
                 # Alert the main loop
@@ -1221,9 +1235,9 @@ class  QueryTerm(dict):
 # 	    self = {'limit': limit, 'user': user, 'tenant': tenant, startDate: startDate, 'endDate': endDate, 'queryTerms': queryTerms}
 
 class dsQuery(dict):
-	def __init__(self, limit, user, tenant, startDate, endDate, queryTerms):
-		dict.__init__(self)
-		self.update({'limit': limit, 'user': user, 'tenant': tenant, startDate: startDate, 'endDate': endDate,
+    def __init__(self, limit, user, tenant, startDate, endDate, queryTerms):
+        dict.__init__(self)
+        self.update({'limit': limit, 'user': user, 'tenant': tenant, startDate: startDate, 'endDate': endDate,
                      'queryTerms': queryTerms})
 
 
@@ -1631,8 +1645,8 @@ class DS_Utility(object):
 
         """
         if self.qt:
-            from PyQt5 import QtCore
-            from PyQt5.QtCore import Qt, pyqtSignal
+            from PyQt6 import QtCore
+            from PyQt6.QtCore import Qt, pyqtSignal
 
             index = 0
             for row in range(0,table.rowCount(), 1):
@@ -1710,7 +1724,7 @@ class DS_Utility(object):
 
         # g.users.items())[g.currentUser]
 
-        # Restore a local archive if master_archive == True
+        # Restore a local archive if master_archive == True and there is an archive_path setting
         if self.dsParam.archive_path != "" and self.dsParam.master_archive:
             self.refresh_archive(userId, self.dsParam.archive_path, self.dsParam.tenant, self.dsParam.routing_keys)
 

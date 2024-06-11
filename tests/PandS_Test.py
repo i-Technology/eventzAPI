@@ -1,10 +1,8 @@
 import time
-import pika
 import logging
 import yaml
-import atexit
-from eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, DS_Parameters, LibrarianClient, DS_Init, QueryTerm, dsQuery
-from flatArchiver import  Archiver
+from eventzAPI import SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init
+from eventzAPI.flatArchiver import  Archiver
 import sys
 import atexit
 
@@ -144,7 +142,7 @@ if __name__ == "__main__":
 
     fd = dsParam.firstData
 
-    with open ('settings.yaml', 'r') as f:
+    with open ('../settings.yaml', 'r') as f:
         appdata = yaml.safe_load(f)
     appParams = APP_Parameters (appdata.get('loginDialog'), appdata.get('uiPath'))
 

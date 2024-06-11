@@ -1,10 +1,8 @@
 import time
-import pika
 import logging
 import yaml
-import atexit
-from eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, DS_Parameters, LibrarianClient, DS_Init, QueryTerm, dsQuery
-from flatArchiver import  Archiver
+from eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init
+from eventzAPI.flatArchiver import  Archiver
 import sys
 import atexit
 from datetime import datetime
