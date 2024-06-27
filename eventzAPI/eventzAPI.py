@@ -256,6 +256,7 @@ class ApplicationInitializer(object):
         self.applicationName = applicationName
         self.path_to_settings = path_to_settings
         self.user_id = user_id
+        self.session_id =  str(uuid.uuid4())
 
     pass
 
@@ -266,14 +267,18 @@ class ApplicationInitializer(object):
         user_id = 'Starting - No user yet.'
 
         logger = DS_Logger(parameters)
+        print(f'Instantiating a Librarian')
         librarian_client = LibrarianClient(parameters, logger)
+        print(f'Instantiating Utilities')
         utilities = DS_Utility(logger, librarian_client, parameters, 'I-Tech')
         utilities.start_application(publisher, user_id)
 
         # Create and start a subscriber thread
+        print(f'Instantiating and starting a Subscriber')
         a_subscriber = SubscriberFactory()
         subscriber = a_subscriber.make_subscriber(parameters, self.user_id, utilities)
         subscriber.start()
+        print(f'Subscriber Instantiated')
 
         return publisher, subscriber, logger, librarian_client, utilities, parameters
 
@@ -1445,8 +1450,8 @@ class DS_Init(object):
                 pathToKey = condata['pathToKey']
                 sessionId = uuid.uuid4()            # Set sessionId here so each instance will have it's own session
                 qt = condata['qt']
-        except:
-            LOGGER.error('Missing settings .yaml File')
+        except Exception as e:
+            LOGGER.error(f'Missing settings .yaml File. Error: {e}')
             return ''                                   # We need a yaml file. If there isn't one, return empty string
 
         if deviceId == '':

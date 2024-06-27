@@ -1,7 +1,8 @@
 import time
 import logging
 import yaml
-from eventzAPI import SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init
+from eventzAPI.eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init, \
+                        RecordAction, LibrarianClient, ApplicationInitializer
 from eventzAPI.flatArchiver import  Archiver
 import sys
 import atexit
@@ -17,15 +18,15 @@ class testps (object):
         self.userId = userId
         self.logger = logger
         self.librarianClient = librarianClient
-        self.subscriptions = self.dsParam.routingKeys
+        self.subscriptions = self.dsParam.subscriptions
         self.publications = self.dsParam.publications
         self.filters = []
-        self.interTaskQueue = dsParam.interTaskQueue
+        self.interTaskQueue = dsParam.inter_task_queue
 
-        self.utilities = DS_Utility(self.logger, self.librarianClient, self.dsParam, self.userId)
+        # self.utilities = DS_Utility(self.logger, self.librarianClient, self.dsParam, self.userId)
 
         # Instantiate a Publisher
-        self.publisher = self.dsParam.thePublisher
+        self.publisher = self.dsParam.the_publisher
 
         # Register code to execute when the application stops.
         atexit.register(self.stopping)
@@ -35,7 +36,7 @@ class testps (object):
 
     def run(self):
         t1 = time.time()
-        MaxSin = 100
+        MaxSin = 2
 
         #RecsPerSin = 50
         #for n in range(0,RecsPerSin):
@@ -127,55 +128,44 @@ if __name__ == "__main__":
 
     applicationId = '55555555-5555-5555-5555-55555555555'
     applicationName =  'Python Pub and Sub Test'
+    path_to_settings = sys.argv[1]
 
     logging.basicConfig(level=logging.ERROR, format=LOG_FORMAT)  # less verbose
 
-    routingKeys = ['999000.00']
+    subscriptions = ['999000.00'] # 999000.00
     publications = ['999000.00']
+    user_id = ''
 
-    dsInit = DS_Init(applicationId, applicationName)
+    # Initialize to get Eventz objects
+    print(f'Instantialing Initializer!!!')
+    ai = ApplicationInitializer(subscriptions, publications, applicationId, applicationName,
+                                path_to_settings, user_id)
+    print(f'Initializing!!!')
+    a_publisher, subscriber, logger, librarian_client, utilities, parameters = ai.initialize()
 
-    dsParam = dsInit.get_params('settings.yaml', routingKeys, publications, None)
+    fd = parameters.first_data
 
-    #aPublisher = Publisher(dsParam)
-    aPublisher = dsParam.thePublisher
 
-    fd = dsParam.firstData
+    archiver = Archiver(parameters.archive_path)
 
-    with open ('../settings.yaml', 'r') as f:
-        appdata = yaml.safe_load(f)
-    appParams = APP_Parameters (appdata.get('loginDialog'), appdata.get('uiPath'))
-
-    logger = DS_Logger(dsParam)
-
-    librarianClient = LibrarianClient(dsParam, logger)
-
-    utilities = DS_Utility(logger, librarianClient, dsParam, 'I-Tech')
-    userId = 'Jamie'
-    # Instantiate a Subscriber Task
-
-    # Instantiate a Subscriber Task
-    archiver = Archiver(dsParam.archivePath)
-
-    # Create and start a subscriber thread
-    aSubscriber = SubscriberFactory()
-    subscriber = aSubscriber.make_subscriber(dsParam, userId, archiver, utilities)
-#    subscriber.setName("SubscriberThread")
-    try:
-        subscriber.start()
-        # subscriber.run()  # Start watching for messages we are subscribing to
-    except AssertionError as error:
-        LOGGER.error("Unable to connect to Subscriber: Assertion Error: " + error)
-        exit()
+    # try:
+    #     # subscriber.start()
+    #     subscriber.run()  # Start watching for messages we are subscribing to
+    #     pass
+    # except AssertionError as error:
+    #     LOGGER.error("Unable to connect to Subscriber: Assertion Error: " + error)
+    #     exit()
     time.sleep(1)
+
     try:
-        testps_ = testps(logger, librarianClient, dsParam, userId, subscriber)
-    except:
-        sys.exit(testps_.stopping())
+        testps = testps(logger, librarian_client, parameters, user_id, subscriber)
+    except Exception as e:
+        print(f'testps throws exceptios: {e}')
+        sys.exit(testps.stopping())
 
     # # Register code to execute when the application stops.
     # atexit.register(testps_.stopping())
-    testps_.run()
+    testps.run()
 
     print("*** Exiting ***")
-    sys.exit(testps_.stopping())
+    sys.exit(testps.stopping())

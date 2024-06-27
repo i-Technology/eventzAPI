@@ -1,7 +1,7 @@
 import time
 import logging
 import yaml
-from eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init
+from eventzAPI.eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, LibrarianClient, DS_Init
 from eventzAPI.flatArchiver import  Archiver
 import sys
 import atexit
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     dsParam = dsInit.get_params('settings.yaml', routingKeys, publications, None)
 
     #aPublisher = Publisher(dsParam)
-    aPublisher = dsParam.thePublisher
+    # aPublisher = dsParam.thePublisher
 
     fd = dsParam.firstData
 
