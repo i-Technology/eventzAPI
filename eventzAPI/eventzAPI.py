@@ -118,12 +118,17 @@
 #      Fixed problem with Master Archive and local archive settings - If you want a local archive populate this parameter.
 #       If you want the local archive initialized from the master then set Master Archive to true
 #
+#
+# Version 2.2.0 Bob Jackson
+#      Changed local archive filename to append part of the session Id so that running multiple copies of an application
+#       at the dame time in the same directory will keep each instance's local archive unique.
+#
 
 
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.0.13'
+__version__ = '2.2.00'
 
 import pika
 import uuid
