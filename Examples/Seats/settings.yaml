@@ -1,0 +1,26 @@
+brokerExchange: amq.topic
+brokerIP: codfish-01.rmq.cloudamqp.com 
+brokerPassword: 7ZJpQw7rSg1LyHLe0zx1rx2a3O27JktI
+brokerUserName: lqcoztwn
+brokerVirtual: lqcoztwn
+currentUser: 1
+deviceId: 58:00:E3:F6:96:50
+deviceName: YourPC
+encrypt: false
+fileLockingEnable: true
+firstData: 16
+interTaskQueue: ''
+librarianExchange: LIBRARIAN_RPC
+librarianExchangeType: direct
+librarianQueue: rpc_queue
+localArchivePath: 'archive.txt'
+master_archive: False
+location: Brantford ON
+loginDialog: LogIn.ui
+myDBID: 6e78f37a-7488-4d7c-9913-cd4d8f71ebad
+pathToCertificate: 
+pathToKey: 
+pathTocacert: 
+qt: false
+rmqServer: true
+tenant: 00000000-0000-0000-0000-000000000000

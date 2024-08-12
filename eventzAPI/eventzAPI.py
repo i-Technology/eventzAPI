@@ -128,7 +128,7 @@
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.2.00'
+__version__ = '2.2.1'
 
 import pika
 import uuid
@@ -1486,7 +1486,7 @@ class DS_Init(object):
 
         # Modify local_archive_path to append the last 4 characters in the sessionid to the file name
         path = dsParam.archive_path
-        uuid_suffix = dsParam.session_id[-4:]   # Extract the last 4 characters of the UUID
+        uuid_suffix = str(dsParam.session_id)[-4:]   # Extract the last 4 characters of the UUID
         name, ext = path.rsplit('.', 1) # Split the file name into name and extension
         new_file_name = f"{name}_{uuid_suffix}.{ext}"    # Construct the new file name
         dsParam.archive_path = new_file_name
