@@ -123,16 +123,24 @@
 #      Changed local archive filename to append part of the session Id so that running multiple copies of an application
 #       at the dame time in the same directory will keep each instance's local archive unique.
 #
+#
+# Version 2.2.1 Bob Jackson
+#      Updated version for PyPi distribution
+#
+# Version 2.2.2 Bob Jackson
+#      Fix datetime issue
+#
 
 
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.2.1'
+__version__ = '2.2.2'
 
 import pika
 import uuid
-import datetime
+# import datetime
+from datetime import datetime
 from enum import Enum
 import ast
 import itertools
@@ -244,7 +252,7 @@ class RecordAction(Enum):
 class ApplicationInitializer(object):
     '''
     Eventz Application Initializer
-    To be instantiated and used to put in place the Eventz objects needed foe a publish & subscribe
+    To be instantiated and used to put in place the Eventz objects needed for a publish & subscribe
         application:
         publisher: The publisher object handles the publication os event records.
         subscriber: The subscriber task watches for event records in routing_keys and passes them to the app.

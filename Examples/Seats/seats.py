@@ -11,7 +11,7 @@ state (grey) As seats are claimed they are added to a list displayed in a text b
 import tkinter as tk
 import json
 from time import perf_counter as my_timer
-
+# import eventzAPI
 from eventzAPI import ApplicationInitializer
 
 
