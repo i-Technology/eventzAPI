@@ -130,17 +130,29 @@
 # Version 2.2.2 Bob Jackson
 #      Fix datetime issue
 #
+#
+# Version 2.2.3 Bob Jackson
+#      more datetime shenanigans
+#
+# Version 2.2.4 Bob Jackson
+#      even more datetime shenanigans
+#
+# Version 2.2.5 Bob Jackson
+#      Update distribution to require python version 12
+#
+# Version 2.2.6 Bob Jackson
+#      Update distribution to require python version 12
+#
 
 
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.2.2'
+__version__ = '2.2.6'
 
 import pika
 import uuid
-# import datetime
-from datetime import datetime
+import datetime
 from enum import Enum
 import ast
 import itertools
@@ -163,13 +175,13 @@ LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name) -30s %(funcName) '
 LOGGER = logging.getLogger(__name__)
 
 #
-# Parameters object to be instatiated once and passed as a parameter to DSAPI objects and methods
+# Parameters object to be instantiated once and passed as a parameter to DSAPI objects and methods
 # 19 Parameters
 #
 
 class DS_Parameters(object):
     '''
-    Parameters object to be instatiated once and passed as a parameter to DSAPI objects and methods
+    Parameters object to be instantiated once and passed as a parameter to DSAPI objects and methods
     23 Parameters
     '''
 
@@ -873,7 +885,7 @@ class QtSubscriber():
             tenantNo = bodyTuple[4]
             LOGGER.info("Record Type: %s", str(recordType))
             rt = int(float(recordType) * 100)
-            myTime = datetime.datetime.utcnow().isoformat(sep='T')
+            myTime = datetime.datetime.now(datetime.UTC).isoformat(sep='T')
 
             LOGGER.info("bodyTuple[firstData]:%s", str(bodyTuple[self.firstData]))
             LOGGER.info("rt: %i", rt)
@@ -1149,7 +1161,7 @@ class NonQtSubscriber():
             tenantNo = bodyTuple[4]
             LOGGER.info("Record Type: %s", str(recordType))
             rt = int(float(recordType) * 100)
-            myTime = datetime.datetime.utcnow().isoformat(sep='T')
+            myTime = datetime.datetime.now(datetime.UTC)
 
             LOGGER.info("bodyTuple[firstData]:%s", str(bodyTuple[self.firstData]))
             LOGGER.info("rt: %i", rt)
@@ -1743,7 +1755,7 @@ class DS_Utility(object):
     def start_application(self, aPublisher, userId):
 
         newUUID = uuid.uuid4()
-        myTime = datetime.datetime.utcnow().isoformat(sep='T')
+        myTime = datetime.datetime.now(datetime.UTC).isoformat(sep='T')
         pid = os.getpid()
 
         # g.users.items())[g.currentUser]
@@ -1769,7 +1781,7 @@ class DS_Utility(object):
     def stop_application(self, aPublisher):
 
         newUUID = uuid.uuid4()
-        myTime = datetime.datetime.utcnow().isoformat(sep='T')
+        myTime = datetime.datetime.now(datetime.UTC).isoformat(sep='T')
         pid = os.getpid()
 
         stopRecord = (self.dsParam.device_id, self.dsParam.device_name, self.dsParam.location,

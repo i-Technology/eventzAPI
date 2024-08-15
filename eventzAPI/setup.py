@@ -8,7 +8,7 @@ setup()
 #
 # setuptools.setup(
 #     name="eventzapi",
-#     version="2.2.1",
+#     version="2.2.6",
 #     author="I-Technology Inc.",
 #     author_email="bobj@i-technologyinc.com",
 #     description="The Events API supports a Python micro-services infrastructure",
@@ -24,5 +24,5 @@ setup()
 #         "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
 #         "Operating System :: OS Independent",
 #     ],
-#     python_requires='>=3.8',
+#     python_requires='>=3.12',
 # )
