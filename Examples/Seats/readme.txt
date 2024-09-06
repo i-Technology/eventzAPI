@@ -1,5 +1,11 @@
 ﻿Seats Demo
 
+Notes:
+1.This application does not render properly on  OSX. Sets do not change colour. However, the log generated notes when seats
+change colour.
+2. This application requires python version 3.12 for correct ISO date rendering in datetime.
+
+
 This python script demonstrates the use of eventzAPI. It generates a seat map simulating the client for a ticket selling application. When the user selects a seat, a message is generated that is sent to a publish and subscribe broker (RabbitMQ) The application subscribes to this message and when it receives it, it changes the state (colour) of the seat to yellow. selecting other seats will repeat the process. If the user clicks on the ‘Payment’ button within a timeout period the subsequent message turnaround will cause the seats selected to turn green indicating they have been purchased by the user. If the timeout expires messaging will be sent that causes the seats to revert to an ‘available’ state (grey) As seats are claimed they are added to a list displayed in a text box at the bottom of the map.
 
 A second instance of this application, running on the users’ machine or another users’ machine, will also subscribe to these messages and ,when the other user selects a seat, the seat will turn to red indicating that the other user has claimed the seat and that it is not available to you. Similarly, a released seat will revert to ‘available’ (grey) . Seats claimed by the user will appear in red on the other users’ map. This will be true for any additional instances of the application wherever they run.
