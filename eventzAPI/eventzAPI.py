@@ -143,12 +143,15 @@
 # Version 2.2.6 Bob Jackson
 #      Update distribution to require python version 12
 #
+# Version 2.2.7 Bob Jackson
+#      Add Programmer's Manual to Documentation
+#
 
 
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.2.6'
+__version__ = '2.2.7'
 
 import pika
 import uuid
