@@ -1,13 +1,9 @@
 
-from eventzAPI.eventzAPI import Publisher, SubscriberFactory, DS_Logger, DS_Utility, DS_Init, RecordAction, \
-    LibrarianClient, ApplicationInitializer
-
+from eventzAPI.eventzAPI import DS_Logger, RecordAction, ApplicationInitializer
 import atexit
-
 import tkinter
-from tkinter import ttk, RIGHT, BOTH, RAISED, StringVar, messagebox
-from tkinter.ttk import Label, Button, Frame, Style
-import uuid
+from tkinter import ttk, BOTH, RAISED, messagebox
+from tkinter.ttk import ( Button, Frame, Style)
 import time
 import sys
 
