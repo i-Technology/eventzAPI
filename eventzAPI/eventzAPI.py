@@ -146,13 +146,16 @@
 # Version 2.2.7 Bob Jackson
 #      Add Programmer's Manual to Documentation
 #
+# Version 2.2.8 Bob Jackson
+#      Change Seats.py for 10 second seat timeout
+#
 
 
 
 import PyQt6.QtCore
 from PyQt6.QtCore import pyqtSignal, QThread
 
-__version__ = '2.2.7'
+__version__ = '2.2.8'
 
 import pika
 import uuid

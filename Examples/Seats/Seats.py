@@ -11,12 +11,12 @@ state (grey) As seats are claimed they are added to a list displayed in a text b
 import tkinter as tk
 import json
 from time import perf_counter as my_timer
-# import eventzAPI
+
 from eventzAPI import ApplicationInitializer
 
 
 class Auditorium:
-    def __init__(self, root, rows=10, cols=15, seat_cost=10, settings_path='settings.yaml'):
+    def __init__(self, root, rows=10, cols=15, seat_cost=10, settings_path='settings1.yaml'):
 
         self.root = root
         self.rows = rows
@@ -40,6 +40,7 @@ class Auditorium:
 
         self.message_text = None
         self.message_label = None
+        self.purchase_timeout = 10 * 10      # 10 seconds
 
         self.initialize_eventz()
         self.run()
@@ -219,7 +220,7 @@ class Auditorium:
             dm = f"My seats: {dmm}"
             self.display_message(dm)        # display this message on the screen
 
-            self.purchase_period = 1000  # 10 seconds to expiry! Buy soon!
+            self.purchase_period = self.purchase_timeout  # 10 seconds to expiry! Buy soon!
             self.publish_seat_status(seat, newstat, self.my_session_id)  # Publish the update to this seat status!
             print("224c publish)")
         if seat == 'A15':  # A15 is a magical key that clears all sold seats
@@ -331,6 +332,7 @@ class Auditorium:
             if self.purchase_period > 0:  # positive number?
                 self.purchase_period -= 1  # less time is left
                 if self.purchase_period == 0:  # If no time is left
+                    print(f'Returning un-purchased seats')
                     self.return_my_seats()  # Your seats return to the pool
 
         self.root.after(100, self.check_queue)
