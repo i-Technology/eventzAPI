@@ -1,5 +1,5 @@
 anvil-uplink==0.5.1
-bleach==3.1.5
+bleach==3.3.0
 certifi==2024.7.4
 charset-normalizer==3.3.2
 docutils==0.21.2
@@ -27,14 +27,14 @@ PyQt6-sip==13.6.0
 python-dateutil==2.8.1
 PyYAML==6.0.1
 readme_renderer==44.0
-requests==2.32.3
+requests==2.32.4
 requests-toolbelt==1.0.0
 rfc3986==2.0.0
 rich==13.7.1
-setuptools==70.3.0
+setuptools==78.1.1
 six==1.16.0
 twine==5.1.1
-urllib3==2.2.2
+urllib3==2.5.0
 webencodings==0.5.1
 wheel==0.43.0
 ws4py-sslupdate==0.5.1b0
